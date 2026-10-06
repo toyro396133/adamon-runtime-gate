@@ -39,13 +39,4 @@ try:
     print(json.dumps(result,sort_keys=True),flush=True)
     (raw/"summary.json").write_text(json.dumps(result,indent=2))
 finally:
-    import tarfile
-    cert = raw/"recipient.pem"
-    cert.write_text("-----BEGIN CERTIFICATE-----\nMIIFITCCAwmgAwIBAgIUF653mDLHAG0v1vTvmrdOqATRkYQwDQYJKoZIhvcNAQEL\nBQAwIDEeMBwGA1UEAwwVbTIxMC1wcml2YXRlLWV2aWRlbmNlMB4XDTI2MTAwNjE4\nMzUxMloXDTI2MTAxMzE4MzUxMlowIDEeMBwGA1UEAwwVbTIxMC1wcml2YXRlLWV2\naWRlbmNlMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA4NPz2/QQ3xkj\nNcDWsTXQNUbrt0PG9aHzGBjEBOKQeB063+Ky/N2hecp59W9h89rYCpv3AsHonVKO\nlknliVQAfS57RzbYtsm9kAURxhnIwTVciMCoMahXdalH9GMSCCrv6NPLay5qWEFC\naBDRqBdAOr00oCh+uhb6bfP88jQpavJ7lZvnakDYBK+mIv2qLIYUdKn3luwCj47G\nWeYrEF7WR42Tqdg6nQFAreftrQTu6Lqbplw6UExX0HFIts95SC/UCZEHmYfp49po\nTvWEiLXRz0/DDhL2pBC2aL3pxbu+AXJ3P32eWhcdqyCLSo00EWfiRz2xg6ELDa/T\n7ctJdEBnOsuA2dPjjiiWyFU+umnCCaqrGMgs0ms5ric4aEm0glyyrF/pQUilqdWC\n1RrzqrkQzTeMBICFgfN+Q9SbDxlHFQ0JnqPqdKEvDS9ejl+FvqxoVIolLCq8iKWx\nnQu0yiilH1A9B5L+jV2EKU6BoCyF/dXyt+n6lV1dcQzQNOytONSzu5wNlPttJHzu\nRqFAChfdPNw9xkWNADfhksflOoFO1zbm/52We7+xaBi0UBLP58GSUCJZiKcHv3EE\nq35AHFpg9FlJsrDvwqlBS59M+ldcbxNuxmQ5gLyRL0aIAHZiBf0Qwy2lIL0CTqle\nOhr9h92ixW6AJoURxmlFLmXseXhhbTsCAwEAAaNTMFEwHQYDVR0OBBYEFEbRyy52\nRsbGESov+JziJqqYjdyZMB8GA1UdIwQYMBaAFEbRyy52RsbGESov+JziJqqYjdyZ\nMA8GA1UdEwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggIBAGsPQ+rwrHdH+TYs\n+T5LMUDwgvQCk2tYdlVh6jliAGGkCdR19FniahLTeOV3MCH2HCxuJdgUHwqJaZ3B\neqW99zuLT4mAzOM7sUx4YIvwzJYrG4N9yN/IZhZ3Eu3uKmMLiwbKkIcrVmVq8bIV\nTRuNcWzUdUR+oAXSAA2SoKcoE9XpeBdh7dan51fRUlHYYzLw5xFSkth+5upy20pO\nHgKrnkTTlty69ZI5CsWtjcIRPwUixM4tmRi4mZ8dCVBHUSdyHeoqk3GUAQBsykQ0\n0wzwSYvR5Rkn3RdjQO8Cc2Zosw/G5E4bzB2BF3Ai20+7cT1D687d6WkAYcCUyXxd\nPVSYzxzZZ3GGMHvqP3Qc00dIAFckCBd18hnBcrkN+pGxlyF/SA8BY1whqDBUBmU8\nJDaJO0EP+fWPifNkBkwwuxKGiSPYdkckmf0y3HIAMVLiawd9KT6rd743qNdLW+hh\n78K3Al2AoiADgSph3rCyz1uuBWkEO7ASwUtQ+/fCFucDO4/7ctHDvXUUgQm3I/nZ\nRdZsccpNOgmKFZIkIWi4315JpzDkPW/g6OevGfRTwwq1WOtnNvdX10P1J9AhGhG0\nqr65jt/PwqI6kmxR1j9P1NM/hwJ/KRUGtlMgRNCkOkzm7HmU/HErfd4dXnHt/amQ\nc2ReSkif+Ha5QUxFORFX9fDi1upx\n-----END CERTIFICATE-----\n")
-    archive = raw/"private-evidence.tar.gz"
-    with tarfile.open(archive,"w:gz") as tar:
-        for path in raw.iterdir():
-            if path != archive: tar.add(path,arcname=path.name)
-    dest = Path(os.environ["RUNNER_TEMP"])/"m210-encrypted-evidence"
-    dest.mkdir(mode=0o700,exist_ok=True)
-    subprocess.run(["openssl","cms","-encrypt","-binary","-aes-256-cbc","-in",str(archive),"-out",str(dest/"evidence.cms"),"-outform","DER",str(cert)],check=True)
+    pass  # Private raw evidence remains on the runner only; cleanup removes it.
