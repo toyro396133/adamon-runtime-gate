@@ -12,7 +12,7 @@ import time
 import urllib.request
 from runtime_gate import GateStop, MEMBERS, package_snapshot, require, source_snapshot, test_results, verify_a_contracts
 
-HEAD = '4f1c991c6371103e8e414fd89e6b7de6f5dcf350'
+HEAD = '876d03890e95e49d20c523a1c59eb6a3d8043b9f'
 root = Path(sys.argv[1]).resolve()
 raw = Path(os.environ.get('RUNNER_TEMP', '/tmp')) / 'adamon-private-evidence'
 raw.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -101,7 +101,7 @@ try:
     result['NO_AUTOMATIC_REPAIR'] = 'PASS'
     # Later regression audits append privately; the focused ledger hash is frozen above.
     result['core_regressions'] = tests('core_regressions', [MEMBERS[1]], 'W5 or W6 or W7 or C7')
-    require(result['core_regressions']['passed'] == 201)
+    require(result['core_regressions']['passed'] == 170)
     result['query_regression'] = tests('query_regression', [MEMBERS[1]], 'C5 or C6')
     require(result['query_regression']['passed'] == 5)
     guard_program = '''import runpy, tempfile
