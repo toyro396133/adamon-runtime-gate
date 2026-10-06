@@ -1,0 +1,189 @@
+{
+  "A-001": "PASS",
+  "A-002": "PASS",
+  "A-003": "PASS",
+  "BLOCKER_CLASS": "NONE",
+  "CORRUPT_CLOSE_REOPEN": "PASS",
+  "FINAL_STATUS": "M2.13_VERIFIED",
+  "MUTATION_LEDGER": {
+    "audits": 117,
+    "cases": 116,
+    "families": {
+      "envelope": 10,
+      "frontier": 26,
+      "merge": 18,
+      "split": 15,
+      "transfer": 22,
+      "typed_reference": 9,
+      "whole": 17
+    },
+    "nodeids_sha256": "50fff3c6bf003fe23a39e96acab6ad04a4d601c69d5c1264918ad53e0c28aa39",
+    "problem_codes": {
+      "FOREIGN_KEYS": 2,
+      "ORGANIZATION_ACTOR": 2,
+      "ORGANIZATION_CHRONOLOGY": 7,
+      "ORGANIZATION_FRONTIER": 29,
+      "ORGANIZATION_ID": 26,
+      "ORGANIZATION_PROTECTION": 2,
+      "ORGANIZATION_PROVENANCE": 14,
+      "ORGANIZATION_REFERENCE": 29,
+      "ORGANIZATION_RELATION": 3,
+      "ORGANIZATION_SCHEMA": 3,
+      "ORGANIZATION_SUPERSESSION": 7,
+      "ORGANIZATION_TRANSFER": 22,
+      "ORGANIZATION_TRANSITION": 33,
+      "ORGANIZATION_WHOLE": 15
+    },
+    "sha256": "48343fcae65638d5a0943f601249695f71e77c989cb721c900ef4041c69a6cc5",
+    "status": "PASS"
+  },
+  "NO_AUTOMATIC_REPAIR": "PASS",
+  "PACKAGE_PRESERVATION": "PASS",
+  "RAW_EVIDENCE": "PRIVATE_RUNNER_ONLY",
+  "SOURCE_HEAD": "876d03890e95e49d20c523a1c59eb6a3d8043b9f",
+  "SOURCE_PRESERVATION": "PASS",
+  "TIER3": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 395,
+    "status": "PASS"
+  },
+  "TIER4": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 624,
+    "status": "PASS"
+  },
+  "VERIFIER_BYTE_PRESERVATION": "PASS",
+  "VERIFIER_REACHES_AUDIT_MERGE_PAIR": "PASS",
+  "WRITER_REJECTION_CONTRACTS": "PASS",
+  "certificates": {
+    "collection": {
+      "elapsed_seconds": 1.12,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "3e9a4d90673785a037f7537adbf4f545f97b664229ea32c94970b686deeb6e80"
+    },
+    "compile": {
+      "elapsed_seconds": 0.21,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "core_regressions": {
+      "elapsed_seconds": 141.5,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "ba9433fc8150fd98873c05bcf6c7dd9f8af07d49a4906998a17c544a7f994294",
+      "xml_sha256": "ef01c53b5e07e0e8e30e35c59f3c427bbe23c2131934af972914467ae027a367"
+    },
+    "dependencies": {
+      "elapsed_seconds": 5.22,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "15db4095954d2519b623ab718eed137468fa8e84087619e484532ebf6468a428"
+    },
+    "focused": {
+      "elapsed_seconds": 91.42,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "91118f1d677de27401476a7dbfc5e4d4c17f44b1ae05de3f36097e5b6ba8d533",
+      "xml_sha256": "5177dec168126b9078a2b479d76e358a4c9d73b327cbedb209100dce56e2a019"
+    },
+    "membership": {
+      "elapsed_seconds": 0.03,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "1ffe965f7a84c8b9291dcc2242bb129bbcd17d5956b383c96f25486954bef989"
+    },
+    "query_regression": {
+      "elapsed_seconds": 4.67,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "42df552cda1c4a578a977a3c7f27210733f9f2e4561825cd62fb33478ed53dd4",
+      "xml_sha256": "61b0c797746e417abdbf452eef662c38e383455497034a9824ca55fa382abfbe"
+    },
+    "supplemental": {
+      "elapsed_seconds": 101.29,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "bf273ba8232c6519edda88b428885a286c6abcd6004211e7589fbf51e7a2d441",
+      "xml_sha256": "555ba6e60e21e72ad246bb6375b28d0d68066511b6072baf19757ee746f5c7db"
+    },
+    "tier3": {
+      "elapsed_seconds": 401.49,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "1943bb6805acff915bdb9374bb72265b90eaaea45d1c211be63dee6b3bfd1de3",
+      "xml_sha256": "8552f36c1a1b7e4278aa70a61b133226f5e6ad53f32575a99621f24d321dfe97"
+    },
+    "tier4": {
+      "elapsed_seconds": 959.13,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "540966236296409bc4f51b423c51502084267c7a8575d22a69d2eec126e37436",
+      "xml_sha256": "3385769309687cb3cf3be260af51f92828a61cccfa0042399dcb213d75fdabc7"
+    },
+    "tiny": {
+      "elapsed_seconds": 3.92,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "37a74e4d6b18e600ed4da2ef46294d59ff2e2dd1eabf42a86bab13b7deba24ec",
+      "xml_sha256": "29985b4686e87cb9e82d5016c882127e5b98b98591128506248ef75ef139c4c1"
+    },
+    "writer_guards": {
+      "elapsed_seconds": 1.52,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "core_regressions": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 170,
+    "status": "PASS"
+  },
+  "focused": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 116,
+    "status": "PASS"
+  },
+  "infrastructure_head": "e7c9a3f63e94a4260747fdbe9e364b8ed7ac4c90",
+  "packages": {
+    "SQLAlchemy": "2.1.1",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1"
+  },
+  "python": "3.12.14",
+  "query_regression": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 5,
+    "status": "PASS"
+  },
+  "runtime_attempt": "1",
+  "runtime_run_id": "37540638604",
+  "source_files": 126,
+  "source_manifest_sha256": "116715e2dae42f261b6b5d5202585fa23218fe238257fab2a18ecde28240d0e4",
+  "supplemental": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 31,
+    "status": "PASS"
+  },
+  "tier3_test_files": [
+    "tests/integration/test_organization.py",
+    "tests/integration/test_organization_m2.py",
+    "tests/integration/test_organization_m2_canonical_values.py",
+    "tests/integration/test_organization_m2_merge.py",
+    "tests/integration/test_organization_m2_merge_projection.py"
+  ],
+  "tiny": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 2,
+    "status": "PASS"
+  }
+}
