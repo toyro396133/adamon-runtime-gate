@@ -1,0 +1,141 @@
+{
+  "A-001": "PASS",
+  "A-002": "PASS",
+  "A-003": "PASS",
+  "BLOCKER_CLASS": "NONE",
+  "FINAL_STATUS": "M2.11_VERIFIED",
+  "PACKAGE_PRESERVATION": "PASS",
+  "RAW_EVIDENCE": "PRIVATE_RUNNER_ONLY",
+  "SOURCE_HEAD": "70e84601290e81d6ccb55b9b2f08c49f6c5b603d",
+  "SOURCE_PRESERVATION": "PASS",
+  "TIER3": {
+    "exit": 1,
+    "expected_missing": 13,
+    "passed": 318,
+    "status": "PASS"
+  },
+  "TIER4": {
+    "exit": 1,
+    "expected_missing": 13,
+    "passed": 547,
+    "status": "PASS"
+  },
+  "VERIFIER_REACHES_AUDIT_MERGE_PAIR": "PASS",
+  "WRITER_REJECTION_CONTRACTS": "PASS",
+  "certificates": {
+    "collection": {
+      "elapsed_seconds": 1.97,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "9928c20c9cb5772a183eeaf999c11abea258211a92f4458d1a74c3637b0c1857"
+    },
+    "compile": {
+      "elapsed_seconds": 0.21,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "dependencies": {
+      "elapsed_seconds": 7.03,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "e062adc05546c236b2e01d652c284e4a00825532e8bd7f850dcf6b2455390f05"
+    },
+    "focused": {
+      "elapsed_seconds": 30.26,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "0ad9171c45cadf6c77a4fcc86df3bc44949719e809cf4beedaa72bc3dc6a0268",
+      "xml_sha256": "3254b0d0036674b819676585d1e5483c560fda82ee1f50b68fdab889260b9405"
+    },
+    "membership": {
+      "elapsed_seconds": 0.03,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "1ffe965f7a84c8b9291dcc2242bb129bbcd17d5956b383c96f25486954bef989"
+    },
+    "supplemental": {
+      "elapsed_seconds": 88.74,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "489e71d10ada6b33257656c67a4e8cddb09f56b1d5658fe670cf09ab10383b00",
+      "xml_sha256": "7c923756a149e5a194a1208e52b4d82bd0c523b4edfc7510f825cf3f42ccb83b"
+    },
+    "tier3": {
+      "elapsed_seconds": 324.01,
+      "exit": 1,
+      "exit_sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "log_sha256": "43df6fe404d5faad476ff1882ba6ded7de5d410c55a3c15b7be88710894eeb8a",
+      "xml_sha256": "9a3914d7b89c018755261538e2075f8cf0ad4cdd3a616b31c0a963d78e0492f1"
+    },
+    "tier4": {
+      "elapsed_seconds": 742.51,
+      "exit": 1,
+      "exit_sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+      "log_sha256": "12c9c33c1329efb2afbc833836a5bb18b7c11d53814382bff6109da77b418b2f",
+      "xml_sha256": "808aad0b70101a05dccf5b02f7be1aac02c12058f2668b79dc59d0c293a3dce1"
+    },
+    "tiny": {
+      "elapsed_seconds": 3.67,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "0ae155f261320c7bf7f59d8ebc0be0c202d76168c16e24825e15566567fca48c",
+      "xml_sha256": "1cb2d50b771ba48f30cb9bab372b2f5460a2e440a646cc24d137c9f7e4558f41"
+    },
+    "w6_regression": {
+      "elapsed_seconds": 58.77,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "2c04fba7a19a09d20005964ae085726cab49bd309ad967554d4bec6c4d930618",
+      "xml_sha256": "864056dadefc658d330975bb74ef42a41e1cd49e76e3d32a56db37e074ed77db"
+    },
+    "writer_guards": {
+      "elapsed_seconds": 1.27,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "focused": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 54,
+    "status": "PASS"
+  },
+  "infrastructure_head": "156560a5e433ee745d055afdbd09716f120bc092",
+  "packages": {
+    "SQLAlchemy": "2.1.1",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1"
+  },
+  "python": "3.12.14",
+  "runtime_attempt": "1",
+  "runtime_run_id": "37526412965",
+  "source_files": 126,
+  "source_manifest_sha256": "b38b38993ec28b85f75eb3bfe2b88af52f2097ea0558e3466ab9cefb83a6fbb3",
+  "supplemental": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 31,
+    "status": "PASS"
+  },
+  "tier3_test_files": [
+    "tests/integration/test_organization.py",
+    "tests/integration/test_organization_m2.py",
+    "tests/integration/test_organization_m2_canonical_values.py",
+    "tests/integration/test_organization_m2_merge.py",
+    "tests/integration/test_organization_m2_merge_projection.py"
+  ],
+  "tiny": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 2,
+    "status": "PASS"
+  },
+  "w6_regression": {
+    "exit": 0,
+    "expected_missing": 0,
+    "passed": 61,
+    "status": "PASS"
+  }
+}
