@@ -70,15 +70,6 @@ jobs:
         shell: bash
         run: python infrastructure/ci/m210_candidate.py private-source
 
-      - name: Preserve encrypted private evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: m210-encrypted-evidence
-          path: ${{ runner.temp }}/m210-encrypted-evidence/evidence.cms
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Remove private source and raw evidence
         if: always()
         shell: bash
