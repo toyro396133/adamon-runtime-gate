@@ -1,0 +1,42 @@
+{
+  "FINAL_STATUS": "SELF_VERIFIED",
+  "M3": "PAUSED_CLEAN_BEFORE_MATERIALIZATION",
+  "SOURCE_HEAD": "82c8264cd469797470b1ff55e1ad9106fbfa41ea",
+  "artifacts": {
+    "byte_audits.json": {
+      "bytes": 433672,
+      "sha256": "cf9f3953277ff8080389e4a2b909bdc2ef5a391deef9c7c610ecceab8e88f5bd"
+    },
+    "package_manifest.json": {
+      "bytes": 51155,
+      "sha256": "e01cebba2e72170843be4c60ed29a74226e269610dafc72d9b2e49849d0aa964"
+    },
+    "self_closure_certificate.json": {
+      "bytes": 5708,
+      "sha256": "d9e8ac04a49a6a748021935688a7d295d463edf3095f4f97647c1f07d7036697"
+    },
+    "source_manifest.json": {
+      "bytes": 14495,
+      "sha256": "ca4aef53f986f30b439f649f54489c25c7d5ddea16e14d05826c676d7de83890"
+    }
+  },
+  "certificate_status": "SELF_VERIFIED",
+  "dependencies": {
+    "elapsed_seconds": 7.13,
+    "exit": 0,
+    "log_sha256": "5be67b120254544b5240acab013c3a6ef2a0879c98509fd5bb55bca5546e2f02"
+  },
+  "heldout_bundle_materialized": false,
+  "infrastructure_head": "2facb4bf9993709949026d20244bb98151e8d6f4",
+  "numeric_seed_derived": false,
+  "oracle_generated": false,
+  "production_evaluation_started": false,
+  "runtime_attempt": "1",
+  "runtime_run_id": "37558917725",
+  "self_protocol": {
+    "elapsed_seconds": 1803.9,
+    "exit": 0,
+    "log_sha256": "9bf054587cfc105bf9b7e948480ed98a76538f8452d06fff9b93ff89241a3861"
+  },
+  "semantic_heldout_results_exposed": false
+}
