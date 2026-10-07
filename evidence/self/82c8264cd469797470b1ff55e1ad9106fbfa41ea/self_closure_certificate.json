@@ -1,0 +1,199 @@
+{
+  "artifacts": {
+    "byte_audits.json": {
+      "bytes": 433672,
+      "sha256": "cf9f3953277ff8080389e4a2b909bdc2ef5a391deef9c7c610ecceab8e88f5bd"
+    },
+    "cognition.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "cognition.log": {
+      "bytes": 110,
+      "sha256": "655cf4d0e0bc8b1be53d514de82e12a0f11d25651436b669dcfa7685de97c069"
+    },
+    "cognition.xml": {
+      "bytes": 10770,
+      "sha256": "a3a6fa9bd1266dd53d0c7aea9484cfd421977eb8638b6304c217835c9f28dce8"
+    },
+    "collection.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "collection.log": {
+      "bytes": 71542,
+      "sha256": "1b1a6a0810ab1de0c5e4eb4f67eba4d930f9029342174a88e3fc6a658c882b12"
+    },
+    "compile.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "organization.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "organization.log": {
+      "bytes": 512,
+      "sha256": "e797622170758eed075ff3c327ceabb7a89f93b960a9ce532f06cf943c316c70"
+    },
+    "organization.xml": {
+      "bytes": 60735,
+      "sha256": "e72ee9c5d5dbd4fbdd72ca414f44d53816f7984783b2caa76147209e7ccbeebf"
+    },
+    "package_manifest.json": {
+      "bytes": 51155,
+      "sha256": "e01cebba2e72170843be4c60ed29a74226e269610dafc72d9b2e49849d0aa964"
+    },
+    "repository_full.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "repository_full.log": {
+      "bytes": 833,
+      "sha256": "0acfc2e33f280d4606f373f6780b2a462629ef12e23e38e7c66c1fbd5df0ee54"
+    },
+    "repository_full.xml": {
+      "bytes": 98134,
+      "sha256": "b9cc50215e8a362f97203c20976519cbce03544dfbf5cd04f724a38098451337"
+    },
+    "self_focused.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "self_focused.log": {
+      "bytes": 100,
+      "sha256": "1e36fb935ee20c1b0edd313730e3e59563729252cf2238407a89e3de56ba9cab"
+    },
+    "self_focused.xml": {
+      "bytes": 5309,
+      "sha256": "f88e0a1b148add45a0dbf19be1e2a859f228c3cb973b016c6e860b1488726416"
+    },
+    "source_manifest.json": {
+      "bytes": 14495,
+      "sha256": "ca4aef53f986f30b439f649f54489c25c7d5ddea16e14d05826c676d7de83890"
+    },
+    "structural.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "structural.log": {
+      "bytes": 100,
+      "sha256": "bd26f15938e9ce66e7787c943968ccee48957fe183949ccfc63d8d0aa3d3862d"
+    },
+    "structural.xml": {
+      "bytes": 7224,
+      "sha256": "b87d31580e692a8307bfbaa7887c8bdcdcaba8c5fd98bc735cdfebc081b89187"
+    },
+    "verifier_corruption.exit": {
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "verifier_corruption.log": {
+      "bytes": 100,
+      "sha256": "cf339157284f3b037cf21a59805c72e2042689be05e721152264f823c1f66451"
+    },
+    "verifier_corruption.xml": {
+      "bytes": 6062,
+      "sha256": "d791a63277005fcab79849ec0b15a8326c36cf8eb2229a9302c4d30f2d57d11d"
+    }
+  },
+  "byte_audit_count": 1253,
+  "candidate_sha": "82c8264cd469797470b1ff55e1ad9106fbfa41ea",
+  "close_reopen": "PASS",
+  "clusters": {
+    "cognition": {
+      "elapsed_seconds": 64.17,
+      "errors": 0,
+      "exit": 0,
+      "failures": 0,
+      "passed": 66,
+      "skipped": 0,
+      "tests": 66
+    },
+    "collection": {
+      "elapsed_seconds": 1.37,
+      "exit": 0
+    },
+    "compile": {
+      "elapsed_seconds": 0.26,
+      "exit": 0
+    },
+    "organization": {
+      "elapsed_seconds": 455.93,
+      "errors": 0,
+      "exit": 0,
+      "failures": 0,
+      "passed": 395,
+      "skipped": 0,
+      "tests": 395
+    },
+    "repository_full": {
+      "elapsed_seconds": 1067.1,
+      "errors": 0,
+      "exit": 0,
+      "failures": 0,
+      "passed": 659,
+      "skipped": 0,
+      "tests": 659
+    },
+    "self_focused": {
+      "elapsed_seconds": 30.42,
+      "errors": 0,
+      "exit": 0,
+      "failures": 0,
+      "passed": 35,
+      "skipped": 0,
+      "tests": 35
+    },
+    "structural": {
+      "elapsed_seconds": 55.52,
+      "errors": 0,
+      "exit": 0,
+      "failures": 0,
+      "passed": 46,
+      "skipped": 0,
+      "tests": 46
+    },
+    "verifier_corruption": {
+      "elapsed_seconds": 34.92,
+      "errors": 0,
+      "exit": 0,
+      "failures": 0,
+      "passed": 41,
+      "skipped": 0,
+      "tests": 41
+    }
+  },
+  "collection_count": 659,
+  "environment": {
+    "packages": {
+      "SQLAlchemy": "2.1.1",
+      "pydantic": "2.13.5",
+      "pytest": "9.1.1"
+    },
+    "python": "3.12.14",
+    "sqlite": "3.45.1"
+  },
+  "heldout_bundle_materialized": false,
+  "m3_status": "PAUSED_CLEAN_BEFORE_MATERIALIZATION",
+  "no_repair": "PASS",
+  "numeric_seed_derived": false,
+  "oracle_generated": false,
+  "package_preservation": "PASS",
+  "production_evaluation_started": false,
+  "semantic_heldout_results_exposed": false,
+  "source_preservation": "PASS",
+  "status": "SELF_VERIFIED",
+  "tier3_membership": [
+    "tests/integration/test_organization.py",
+    "tests/integration/test_organization_m2.py",
+    "tests/integration/test_organization_m2_canonical_values.py",
+    "tests/integration/test_organization_m2_merge.py",
+    "tests/integration/test_organization_m2_merge_projection.py"
+  ],
+  "verifier_byte_preservation": "PASS"
+}
