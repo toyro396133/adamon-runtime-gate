@@ -1,0 +1,571 @@
+{
+  "environment": {
+    "SQLAlchemy": "2.1.1",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "python": "3.12.14",
+    "sqlite": "3.45.1"
+  },
+  "scenarios": {
+    "containment-500": {
+      "identical_histories_and_results": true,
+      "replicas": [
+        {
+          "checks": {
+            "all_sources_recovered": true,
+            "contradictions_retained": true,
+            "exceptions_retained": true,
+            "median_load_threshold": true,
+            "no_unsupported_synthesis": true,
+            "registered_leaf_count": true
+          },
+          "containment": {
+            "active_ratio": 0.1,
+            "leaf_count": 500,
+            "median_active": 5.0,
+            "no_containment_median_active": 50,
+            "recovered_queries": 50,
+            "recovery_ratio": 1.0
+          },
+          "full_history_digest": "bf31c4817ad3d91540e1113f28ce224abaed61aa818a3ed64e4ff1b71c499e12",
+          "gen04_digest": "00970722b7a1576394a8aa37fe16d72550394f4b080153c95dbfe2da94608afe",
+          "measurements": {
+            "audit_seconds": 0.5144144569999298,
+            "database_bytes": 7614464,
+            "organization_page_bytes": 839680,
+            "organization_rows": 2139,
+            "scenario_seconds": 36.42950872699976,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 50,
+              "organization_frontiers": 10,
+              "organization_refs": 1544,
+              "organization_relations": 501,
+              "organization_schema": 1,
+              "organization_steps": 22,
+              "organization_wholes": 10
+            }
+          },
+          "organization_digest": "687ddc447103316ee7d32cc936c9bbcddc1aaab79da7e9ddd4dfafc473131540",
+          "read_only_bytes_preserved": true,
+          "registered_active_load_threshold": 0.25,
+          "reopen_identical": true,
+          "verified": true
+        },
+        {
+          "checks": {
+            "all_sources_recovered": true,
+            "contradictions_retained": true,
+            "exceptions_retained": true,
+            "median_load_threshold": true,
+            "no_unsupported_synthesis": true,
+            "registered_leaf_count": true
+          },
+          "containment": {
+            "active_ratio": 0.1,
+            "leaf_count": 500,
+            "median_active": 5.0,
+            "no_containment_median_active": 50,
+            "recovered_queries": 50,
+            "recovery_ratio": 1.0
+          },
+          "full_history_digest": "bf31c4817ad3d91540e1113f28ce224abaed61aa818a3ed64e4ff1b71c499e12",
+          "gen04_digest": "00970722b7a1576394a8aa37fe16d72550394f4b080153c95dbfe2da94608afe",
+          "measurements": {
+            "audit_seconds": 0.4887773850000485,
+            "database_bytes": 7614464,
+            "organization_page_bytes": 839680,
+            "organization_rows": 2139,
+            "scenario_seconds": 34.132529236999744,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 50,
+              "organization_frontiers": 10,
+              "organization_refs": 1544,
+              "organization_relations": 501,
+              "organization_schema": 1,
+              "organization_steps": 22,
+              "organization_wholes": 10
+            }
+          },
+          "organization_digest": "687ddc447103316ee7d32cc936c9bbcddc1aaab79da7e9ddd4dfafc473131540",
+          "read_only_bytes_preserved": true,
+          "registered_active_load_threshold": 0.25,
+          "reopen_identical": true,
+          "verified": true
+        }
+      ]
+    },
+    "influence": {
+      "identical_histories_and_results": true,
+      "replicas": [
+        {
+          "checks": {
+            "capacity_clamp_changes_same_offered_result": true,
+            "context_roles_differ": true,
+            "direct_copy_loses_transform": true,
+            "feedback_changes_current_standing": true,
+            "historical_relation_preserved": true,
+            "identity_seed_preserved": true,
+            "lower_history_preserved": true,
+            "no_return_feedback_loses_path_update": true,
+            "old_self_state_preserved": true,
+            "realised_inputs_differ": true,
+            "self_and_observation_preserved": true
+          },
+          "full_history_digest": "b54bf110178ae31d761eee461b756552e236936b9ef6f5878fd47baa60b26f98",
+          "gen04_digest": "7f97636ad21291fbc9925cd9d29034d4503aeda80333a37217f41d7127222dbf",
+          "measurements": {
+            "audit_seconds": 0.01771660999975211,
+            "database_bytes": 1376256,
+            "organization_page_bytes": 73728,
+            "organization_rows": 21,
+            "scenario_seconds": 1.7984356889996889,
+            "table_counts": {
+              "organization_assessments": 0,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 14,
+              "organization_relations": 3,
+              "organization_schema": 1,
+              "organization_steps": 3,
+              "organization_wholes": 0
+            }
+          },
+          "organization_digest": "549399ed059db52469f0f787db203bf041ee92f731f68223de9d6e9c6755a8af",
+          "read_only_bytes_preserved": true,
+          "registered_influence": {
+            "capacity_changed_pairs": 6,
+            "direct_copy_changed_transfers": 8,
+            "feedback_changed_paths": 8,
+            "full_standing": "weakened",
+            "no_feedback_standing": "supported"
+          },
+          "reopen_identical": true,
+          "verified": true
+        },
+        {
+          "checks": {
+            "capacity_clamp_changes_same_offered_result": true,
+            "context_roles_differ": true,
+            "direct_copy_loses_transform": true,
+            "feedback_changes_current_standing": true,
+            "historical_relation_preserved": true,
+            "identity_seed_preserved": true,
+            "lower_history_preserved": true,
+            "no_return_feedback_loses_path_update": true,
+            "old_self_state_preserved": true,
+            "realised_inputs_differ": true,
+            "self_and_observation_preserved": true
+          },
+          "full_history_digest": "b54bf110178ae31d761eee461b756552e236936b9ef6f5878fd47baa60b26f98",
+          "gen04_digest": "7f97636ad21291fbc9925cd9d29034d4503aeda80333a37217f41d7127222dbf",
+          "measurements": {
+            "audit_seconds": 0.0185041990002901,
+            "database_bytes": 1376256,
+            "organization_page_bytes": 73728,
+            "organization_rows": 21,
+            "scenario_seconds": 0.6774519509999664,
+            "table_counts": {
+              "organization_assessments": 0,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 14,
+              "organization_relations": 3,
+              "organization_schema": 1,
+              "organization_steps": 3,
+              "organization_wholes": 0
+            }
+          },
+          "organization_digest": "549399ed059db52469f0f787db203bf041ee92f731f68223de9d6e9c6755a8af",
+          "read_only_bytes_preserved": true,
+          "registered_influence": {
+            "capacity_changed_pairs": 6,
+            "direct_copy_changed_transfers": 8,
+            "feedback_changed_paths": 8,
+            "full_standing": "weakened",
+            "no_feedback_standing": "supported"
+          },
+          "reopen_identical": true,
+          "verified": true
+        }
+      ]
+    },
+    "significance-0": {
+      "identical_histories_and_results": true,
+      "replicas": [
+        {
+          "abundance_baselines": {
+            "degree": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                8
+              ]
+            },
+            "frequency": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                108
+              ]
+            },
+            "volume": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                999
+              ]
+            }
+          },
+          "checks": {
+            "all_abundance_baselines_fail": true,
+            "incidental": true,
+            "repetition_invariant": true,
+            "required": true
+          },
+          "full_classification": "required",
+          "full_history_digest": "3c863bd3a4444f50c565ac7417e5496f63ea6807b11f64aa34204761763e41e2",
+          "gen04_digest": "ab876b6aa9414645ed7384c572d6955bf27c29c1a2c0ae0ba70383b0fd010572",
+          "incidental_classification": "unrelated",
+          "measurements": {
+            "audit_seconds": 0.04830765799988512,
+            "database_bytes": 1499136,
+            "organization_page_bytes": 221184,
+            "organization_rows": 442,
+            "scenario_seconds": 1.274230548000105,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 221,
+              "organization_relations": 109,
+              "organization_schema": 1,
+              "organization_steps": 110,
+              "organization_wholes": 0
+            }
+          },
+          "no_counterfactual_ablation": {
+            "loses_required_classification": true,
+            "result": "unknown"
+          },
+          "organization_digest": "15921111942223faa3cab61b58a0cf951c7f84008e50e050da6776e3431b9873",
+          "read_only_bytes_preserved": true,
+          "reopen_identical": true,
+          "verified": true
+        },
+        {
+          "abundance_baselines": {
+            "degree": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                8
+              ]
+            },
+            "frequency": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                108
+              ]
+            },
+            "volume": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                999
+              ]
+            }
+          },
+          "checks": {
+            "all_abundance_baselines_fail": true,
+            "incidental": true,
+            "repetition_invariant": true,
+            "required": true
+          },
+          "full_classification": "required",
+          "full_history_digest": "3c863bd3a4444f50c565ac7417e5496f63ea6807b11f64aa34204761763e41e2",
+          "gen04_digest": "ab876b6aa9414645ed7384c572d6955bf27c29c1a2c0ae0ba70383b0fd010572",
+          "incidental_classification": "unrelated",
+          "measurements": {
+            "audit_seconds": 0.04780062700001508,
+            "database_bytes": 1499136,
+            "organization_page_bytes": 221184,
+            "organization_rows": 442,
+            "scenario_seconds": 1.2988945339998281,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 221,
+              "organization_relations": 109,
+              "organization_schema": 1,
+              "organization_steps": 110,
+              "organization_wholes": 0
+            }
+          },
+          "no_counterfactual_ablation": {
+            "loses_required_classification": true,
+            "result": "unknown"
+          },
+          "organization_digest": "15921111942223faa3cab61b58a0cf951c7f84008e50e050da6776e3431b9873",
+          "read_only_bytes_preserved": true,
+          "reopen_identical": true,
+          "verified": true
+        }
+      ]
+    },
+    "significance-1": {
+      "identical_histories_and_results": true,
+      "replicas": [
+        {
+          "abundance_baselines": {
+            "degree": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                11
+              ]
+            },
+            "frequency": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                111
+              ]
+            },
+            "volume": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                999
+              ]
+            }
+          },
+          "checks": {
+            "all_abundance_baselines_fail": true,
+            "incidental": true,
+            "repetition_invariant": true,
+            "required": true
+          },
+          "full_classification": "required",
+          "full_history_digest": "e89daa280fe10fef97cfc40d678b792a3f6cc5edc9f2dce6394f8bdbc0fac9ac",
+          "gen04_digest": "1cca3ddf0705ebe8e0185343cd77867de127949ba7844924f699da4177d4f1ed",
+          "incidental_classification": "unrelated",
+          "measurements": {
+            "audit_seconds": 0.05054667899958076,
+            "database_bytes": 1556480,
+            "organization_page_bytes": 229376,
+            "organization_rows": 454,
+            "scenario_seconds": 1.4345764409999902,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 227,
+              "organization_relations": 112,
+              "organization_schema": 1,
+              "organization_steps": 113,
+              "organization_wholes": 0
+            }
+          },
+          "no_counterfactual_ablation": {
+            "loses_required_classification": true,
+            "result": "unknown"
+          },
+          "organization_digest": "6a9605a95a54caaa39a75065e16a840bd5c04b355bd4ecc3058e50c5c0492331",
+          "read_only_bytes_preserved": true,
+          "reopen_identical": true,
+          "verified": true
+        },
+        {
+          "abundance_baselines": {
+            "degree": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                11
+              ]
+            },
+            "frequency": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                111
+              ]
+            },
+            "volume": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                999
+              ]
+            }
+          },
+          "checks": {
+            "all_abundance_baselines_fail": true,
+            "incidental": true,
+            "repetition_invariant": true,
+            "required": true
+          },
+          "full_classification": "required",
+          "full_history_digest": "e89daa280fe10fef97cfc40d678b792a3f6cc5edc9f2dce6394f8bdbc0fac9ac",
+          "gen04_digest": "1cca3ddf0705ebe8e0185343cd77867de127949ba7844924f699da4177d4f1ed",
+          "incidental_classification": "unrelated",
+          "measurements": {
+            "audit_seconds": 0.050072014999841485,
+            "database_bytes": 1556480,
+            "organization_page_bytes": 229376,
+            "organization_rows": 454,
+            "scenario_seconds": 1.2292198310001368,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 227,
+              "organization_relations": 112,
+              "organization_schema": 1,
+              "organization_steps": 113,
+              "organization_wholes": 0
+            }
+          },
+          "no_counterfactual_ablation": {
+            "loses_required_classification": true,
+            "result": "unknown"
+          },
+          "organization_digest": "6a9605a95a54caaa39a75065e16a840bd5c04b355bd4ecc3058e50c5c0492331",
+          "read_only_bytes_preserved": true,
+          "reopen_identical": true,
+          "verified": true
+        }
+      ]
+    },
+    "significance-2": {
+      "identical_histories_and_results": true,
+      "replicas": [
+        {
+          "abundance_baselines": {
+            "degree": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                14
+              ]
+            },
+            "frequency": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                114
+              ]
+            },
+            "volume": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                999
+              ]
+            }
+          },
+          "checks": {
+            "all_abundance_baselines_fail": true,
+            "incidental": true,
+            "repetition_invariant": true,
+            "required": true
+          },
+          "full_classification": "required",
+          "full_history_digest": "602909a85b1e6c91908c692d9c8a79ef1874cb867d5acdc50e0cec24af74beb4",
+          "gen04_digest": "1e7800fcaf92570c09d2aaa89f039f6937342c5f022915d989abc0148e4c936a",
+          "incidental_classification": "unrelated",
+          "measurements": {
+            "audit_seconds": 0.051932203999967896,
+            "database_bytes": 1597440,
+            "organization_page_bytes": 233472,
+            "organization_rows": 470,
+            "scenario_seconds": 1.5513803050002934,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 235,
+              "organization_relations": 116,
+              "organization_schema": 1,
+              "organization_steps": 117,
+              "organization_wholes": 0
+            }
+          },
+          "no_counterfactual_ablation": {
+            "loses_required_classification": true,
+            "result": "unknown"
+          },
+          "organization_digest": "4490092b920da0123b96a6ed38bd96db7e5d1ad4bb67b12be3b65efb18ff2fa0",
+          "read_only_bytes_preserved": true,
+          "reopen_identical": true,
+          "verified": true
+        },
+        {
+          "abundance_baselines": {
+            "degree": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                14
+              ]
+            },
+            "frequency": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                114
+              ]
+            },
+            "volume": {
+              "identifies_target_role": false,
+              "values_sorted": [
+                1,
+                999
+              ]
+            }
+          },
+          "checks": {
+            "all_abundance_baselines_fail": true,
+            "incidental": true,
+            "repetition_invariant": true,
+            "required": true
+          },
+          "full_classification": "required",
+          "full_history_digest": "602909a85b1e6c91908c692d9c8a79ef1874cb867d5acdc50e0cec24af74beb4",
+          "gen04_digest": "1e7800fcaf92570c09d2aaa89f039f6937342c5f022915d989abc0148e4c936a",
+          "incidental_classification": "unrelated",
+          "measurements": {
+            "audit_seconds": 0.05374417200027892,
+            "database_bytes": 1597440,
+            "organization_page_bytes": 233472,
+            "organization_rows": 470,
+            "scenario_seconds": 1.5973589409995839,
+            "table_counts": {
+              "organization_assessments": 1,
+              "organization_frontier_entries": 0,
+              "organization_frontiers": 0,
+              "organization_refs": 235,
+              "organization_relations": 116,
+              "organization_schema": 1,
+              "organization_steps": 117,
+              "organization_wholes": 0
+            }
+          },
+          "no_counterfactual_ablation": {
+            "loses_required_classification": true,
+            "result": "unknown"
+          },
+          "organization_digest": "4490092b920da0123b96a6ed38bd96db7e5d1ad4bb67b12be3b65efb18ff2fa0",
+          "read_only_bytes_preserved": true,
+          "reopen_identical": true,
+          "verified": true
+        }
+      ]
+    }
+  },
+  "scope": "REGISTERED_SYNTHETIC_DEVELOPMENT"
+}
