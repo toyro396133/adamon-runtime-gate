@@ -1,0 +1,21 @@
+{
+  "FINAL_STATUS": "M2_VERIFIED",
+  "stage": "M2.14_VERIFIED",
+  "HELD_OUT_GENERALISATION": "PENDING",
+  "M3": "NOT_STARTED",
+  "candidate_sha": "d7cd7cc9061747344ca4565d7e3ef1f8ed7c7679",
+  "final_docs_head": "abc228394f628baeb6a8cc8c7b08fb607e2321d5",
+  "final_docs_tree": "8a422c1dce3c15f5e905746e9cd842e150d6043d",
+  "branch": "work/m214-final-m2-closure-20261007",
+  "repository": "toyro396133/cognitive-zero",
+  "external_ci_run_id": 37547135736,
+  "external_ci_conclusion": "success",
+  "tier3_passed": 395,
+  "full_a_passed": 624,
+  "full_b_passed": 624,
+  "fixture_pairs": 627,
+  "non_docs_identical": 127,
+  "source_preservation": "PASS",
+  "results_markdown_sha256": "93790b121619ee884c843085ac52008bf5a98625d9cc1365d69be134db70fe28",
+  "remote_head_verified": true
+}
