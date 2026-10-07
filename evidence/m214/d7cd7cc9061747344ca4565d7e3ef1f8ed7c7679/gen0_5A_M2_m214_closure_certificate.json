@@ -1,0 +1,544 @@
+{
+  "FINAL_STATUS": "M2_VERIFIED",
+  "HELD_OUT_GENERALISATION": "PENDING",
+  "M3": "NOT_STARTED",
+  "baseline_ablation_evidence": {
+    "C6_similarity_only": {
+      "evidence": {
+        "contracts": {
+          "6174f52ed502a550517816c7ac887b44880b547bfbef2bf34f3d9ca4aee23bbc": 1
+        },
+        "status": "PASS_BOTH_REPLICAS"
+      },
+      "status": "contract-supported qualitative"
+    },
+    "W7_unsafe_source_evidence": {
+      "evidence": {
+        "contracts": {
+          "ea254d15797ad210a5d07960d53525cbd46c058e531b6f4e6f933fd72c2c6bce": 8
+        },
+        "status": "PASS_BOTH_REPLICAS"
+      },
+      "status": "contract-supported qualitative"
+    },
+    "containment": {
+      "active_ratio": 0.1,
+      "leaf_count": 500,
+      "median_active": 5.0,
+      "no_containment_median_active": 50,
+      "recovered_queries": 50,
+      "recovery_ratio": 1.0,
+      "registered_active_ratio_threshold": 0.25,
+      "status": "REGISTERED_NUMERIC_SUPPORTED"
+    },
+    "flat_context_single_tree_overlap": {
+      "evidence": {
+        "contracts": {
+          "147a1e813733c812f326b6ec4e35c86099f3f473deb65e43e8d0f91c55f13792": 1,
+          "1bac2682c0e53db8d6cb84fafeb7f4632f8f361809fb483aed5577c76b252bad": 2
+        },
+        "status": "PASS_BOTH_REPLICAS"
+      },
+      "status": "contract-supported qualitative"
+    },
+    "significance_abundance": {
+      "baseline_role_accuracy": 0,
+      "full_role_accuracy": 1,
+      "registered_variants": 3,
+      "status": "ABLATION_SUPPORTED"
+    },
+    "status": "REGISTERED_NUMERIC_AND_CONTRACT_SUPPORTED_QUALITATIVE",
+    "transition_functional_ablation": {
+      "evidence": {
+        "contracts": {
+          "6d25823561959868dfcf84315263f77600e682144841c6cdcfca3720fc463d7b": 1,
+          "90e24c14be8ea3e9de2f25468e50f9d2bfce66447847312673b1e68681c39a72": 1
+        },
+        "status": "PASS_BOTH_REPLICAS"
+      },
+      "status": "contract-supported qualitative"
+    }
+  },
+  "candidate_sha": "d7cd7cc9061747344ca4565d7e3ef1f8ed7c7679",
+  "close_reopen": "PASS",
+  "collection": {
+    "cases": 624,
+    "status": "PASS"
+  },
+  "commands": {
+    "collection": {
+      "elapsed_seconds": 1.1502077400000132,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "c74630277e8f1174a56dc2ca5bcbabefc328ba4614826bb0cb2c3e5f56899ea0"
+    },
+    "compile": {
+      "elapsed_seconds": 0.2322362440000063,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "full_a": {
+      "elapsed_seconds": 1187.961445368,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "33262c7fdbf680b3a9e222dabfd8d84a5e7de2fbc4b0711506dc4d763f791802",
+      "xml_sha256": "4892b5767938a804085603f0177cc74c44f0cabc1e85aa7d4877c8e629485430"
+    },
+    "full_b": {
+      "elapsed_seconds": 1216.508836836,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "a066603ae16a2a4ca03b3bee1f6d91a8ba824fe398cb62bc065fbd20e3ea48ef",
+      "xml_sha256": "44d2a9afa5c9d4e6df86f76b94709f548680a39a6d7607f30e7aee2e1a22886f"
+    },
+    "m1_measurements": {
+      "elapsed_seconds": 84.83976662800023,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "a300ce15a97422f64d3da070aee599ba28cc011e3690638d0336659fab730dc6"
+    },
+    "membership": {
+      "elapsed_seconds": 0.02653571700000157,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "1ffe965f7a84c8b9291dcc2242bb129bbcd17d5956b383c96f25486954bef989"
+    },
+    "replay": {
+      "elapsed_seconds": 157.09147046399994,
+      "exit": 0
+    },
+    "tier3": {
+      "elapsed_seconds": 452.26605582800005,
+      "exit": 0,
+      "exit_sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "log_sha256": "ec54e3ef2aa0d84e1c811fb2301baa17e616e227f130ac554f91e937c2aa0ba9",
+      "xml_sha256": "8d2a3d19ced49bf54e413769b4315386b064a1ecec4a898592962d0855144341"
+    }
+  },
+  "compile": "PASS",
+  "deterministic_histories": "PASS",
+  "environment": {
+    "SQLAlchemy": "2.1.1",
+    "pydantic": "2.13.5",
+    "pytest": "9.1.1",
+    "python": "3.12.14",
+    "sqlite": "3.45.1"
+  },
+  "external_ci_run_id": "37547135736",
+  "final_docs_head": "PENDING_FINAL_DOCS_COMMIT",
+  "final_source_manifest_hash": "e6e17c26e231a69a156d183db7c92f58a54d3090c221afb07e0927fd870866d7",
+  "full_run_a": {
+    "errors": 0,
+    "exit": 0,
+    "expected_missing": 0,
+    "failures": 0,
+    "outcomes_sha256": "5317d3b03763f51986c7ceeed8fa8dbd8358e308e59c05f13cdfe102c4032a11",
+    "passed": 624,
+    "skips_xfails": 0
+  },
+  "full_run_b": {
+    "errors": 0,
+    "exit": 0,
+    "expected_missing": 0,
+    "failures": 0,
+    "outcomes_sha256": "5317d3b03763f51986c7ceeed8fa8dbd8358e308e59c05f13cdfe102c4032a11",
+    "passed": 624,
+    "skips_xfails": 0
+  },
+  "hard_fail_conditions": {
+    "automatic_parent_rule_inheritance": {
+      "contracts": {
+        "ea947e9d2f77163677d4f14b754ea372a4fb129342016e434475fc1b93b2fa4e": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "bounded_conclusive_decision": {
+      "contracts": {
+        "91e92faa224f08954fe623f26a7f67102bf987f10f8a4eaa16f8f99d5e8559e2": 1,
+        "b681a7187ab0f11338131f63163a133c072c2401cf559003d01365f641a3735c": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "caller_partition_proves_split": {
+      "contracts": {
+        "96fe5ef6326b3b8ecdbfe08fd19ab072f480b92939cb0703b60ea9731dd69d22": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "destructive_whole_replacement": {
+      "contracts": {
+        "36aa17daa9ca383f5099263fbf24d82c8a5ba9a610e9d5464b0cf1e57540f3c2": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "duplicate_experience_inflation": {
+      "contracts": {
+        "38ac82d8ea124eea2a9719795e98015e76370f9161c944e842f12d933a4b2846": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "hidden_central_controller": {
+      "contracts": {
+        "84975a0957210374bf7d01feecf60303438d00f99f736b12342b3ffa1cd997ad": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "historical_rewrite": {
+      "contracts": {
+        "815a2a2b5c996e4813efba5c3b96e42ab3b001c7111df217ba374e1bf97e2677": 1,
+        "a7fed5cbea7f843a1ca6757965eca676b74b2dae9148de0d5e0ac8e2a377545e": 2
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "ignored_exception_contradiction": {
+      "contracts": {
+        "25798be05e2359ae994e356bd8cc89bc20489d074880ed9b72871765752b4ae0": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "overlap_merge_shortcut": {
+      "contracts": {
+        "5435c47c063223208ffe5fcf50d2715198d534cb80bd81e3ca65a656b2a98a73": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "post_result_threshold_tuning": {
+      "contracts": {
+        "b3fcfbb7719a6d67e99d5cdd5e2685b57bdb9d0e37b74477f577fd452041a5ee": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "similarity_name_volume_merge": {
+      "contracts": {
+        "6174f52ed502a550517816c7ac887b44880b547bfbef2bf34f3d9ca4aee23bbc": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "source_membership_reassignment": {
+      "contracts": {
+        "815a2a2b5c996e4813efba5c3b96e42ab3b001c7111df217ba374e1bf97e2677": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "source_supports_transfer_target": {
+      "contracts": {
+        "ea254d15797ad210a5d07960d53525cbd46c058e531b6f4e6f933fd72c2c6bce": 8
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "supported_successor_fork": {
+      "contracts": {
+        "cd121f6b49ef095a024922c39df0e25949aeca7654ce47439609396a2e1d99f2": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "target_rejection_mutates_source": {
+      "contracts": {
+        "59ce4ad97371d7707e65516296fe78a792ec944e733f7f0c322cf915bcbdea60": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "transition_functional_significance": {
+      "contracts": {
+        "6d25823561959868dfcf84315263f77600e682144841c6cdcfca3720fc463d7b": 1,
+        "90e24c14be8ea3e9de2f25468e50f9d2bfce66447847312673b1e68681c39a72": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "trigger_adds_evidence_confidence": {
+      "contracts": {
+        "19cf8b7071b52d8cd35c9c5d4f98535da37fc2acb698870f3b2f472732eb00f1": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "unregistered_persistent_table": {
+      "contracts": {
+        "b3fcfbb7719a6d67e99d5cdd5e2685b57bdb9d0e37b74477f577fd452041a5ee": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "unrelated_trigger_branch": {
+      "contracts": {
+        "dd197309228a87cf1b858e6c79649bac4ada9fa832094e893995a40aa9d0f963": 1
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    },
+    "weakened_unresolved_auto_split": {
+      "contracts": {
+        "ee1da8746eb3254b04e70fe244341201d61d707bda5e129f51ca73a0e1ac6f71": 5
+      },
+      "status": "PASS_BOTH_REPLICAS",
+      "violated": false
+    }
+  },
+  "measurements_artifact_hash": "76a8763e3dbc03a6ad2aace1e737aa0cc12b38044e052aee7a028af256fd93dd",
+  "mutation_closure_inherited_from_M213": {
+    "audits_per_full_run": 117,
+    "cases": 116,
+    "ledger_sha256": "48343fcae65638d5a0943f601249695f71e77c989cb721c900ef4041c69a6cc5",
+    "status": "PASS_BOTH_FRESH_RUNS"
+  },
+  "no_automatic_repair": "PASS",
+  "package_manifest_artifact": "package_manifest.json",
+  "package_manifest_hash": "a7aca608d1136c339d7d521a433d3259bc2bf5c844440b61367a08350d5c0eff",
+  "package_preservation": "PASS",
+  "replay_artifact_sha256": "ca2b9621d4d13395ea896dd1e7d1b6cc288db85516647520f28009cba43e33a5",
+  "replay_comparison": {
+    "all_identical": true,
+    "fixture_pairs": 627,
+    "negative_pairs": 220,
+    "valid_pairs": 407
+  },
+  "results_artifact_hash": "da115bf9c9dd1bb43ea5e44aa756a39c9ef14432711d6334df35103636ed25ee",
+  "results_markdown_hash": "2a57fe8f9a309e6d6de44a5de956222c47eeb321b48cb2cb506e67ec7a2dc67d",
+  "runtime_storage_measurements": {
+    "database_bytes": {
+      "max": 460390400,
+      "median": 1277952.0,
+      "min": 1138688
+    },
+    "database_measurement_scope": "retained SQLite files in full run A; full run B histories independently compared",
+    "deliberate_negative_fixture_count": 220,
+    "environment": {
+      "SQLAlchemy": "2.1.1",
+      "pydantic": "2.13.5",
+      "pytest": "9.1.1",
+      "python": "3.12.14",
+      "sqlite": "3.45.1"
+    },
+    "full_run_a_seconds": 1187.961445368,
+    "full_run_b_seconds": 1216.508836836,
+    "invalid_non_sqlite_artifact_count": 1,
+    "largest_m2_fixtures": [
+      {
+        "database_bytes": 3104768,
+        "fixture_hash": "a66a737be053abbdd521f2ee2899f7bc7c34b08f5657f6e5d6eea6845722b6e9",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 2609152,
+        "fixture_hash": "3427d6210c639219b2ca45c70e6a6069a2d6fc51e5bd25ea6b726216df75ecc8",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 2605056,
+        "fixture_hash": "60cc62a019532088cf3d03cf813a10f06eb0e99f07ecb5ba0dc574518563abdc",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 2572288,
+        "fixture_hash": "e705f08ba577d3d27ee0445bcf0971c798c02b1165707fb2235e9275f4a5568d",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 2555904,
+        "fixture_hash": "b2577e0b26cbdf49db5c6bc4075bcbda501cc1264e1afd8bc951ee81d4a5f9c0",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 1994752,
+        "fixture_hash": "acddc9d1f2d3ff3b81a42aec1c6d8058ea0560616a194e54beab555f4a4e6a6c",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 1409024,
+        "fixture_hash": "4d0a364c7a35a753969dff043e7aa53cd8b65600536d37abed82bb58323f112f",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 1372160,
+        "fixture_hash": "4db56c94bb87706572d454947bcfc81f20428d0c35abb698672145ee0ccdc804",
+        "table_count": 104,
+        "valid": true
+      },
+      {
+        "database_bytes": 1372160,
+        "fixture_hash": "401a1358c2243447902f9d80917c203f646d254037874e9c5c5529711ea14081",
+        "table_count": 104,
+        "valid": false
+      },
+      {
+        "database_bytes": 1372160,
+        "fixture_hash": "d55ba20e05f388dc91bf9c84dc29022fc1cf83bd551d5b4fb45db0ceb425861c",
+        "table_count": 104,
+        "valid": true
+      }
+    ],
+    "measurement_scope": "DESCRIPTIVE_NO_NEW_THRESHOLDS",
+    "organization_table_row_totals_replica_a": {
+      "organization_assessments": 4,
+      "organization_frontier_entries": 514,
+      "organization_frontiers": 68,
+      "organization_refs": 33323,
+      "organization_relations": 5883,
+      "organization_schema": 374,
+      "organization_steps": 4498,
+      "organization_wholes": 431
+    },
+    "replay_comparison": "PASS",
+    "retained_fixture_count": 627,
+    "sqlite_fixture_count": 626,
+    "table_count": {
+      "max": 104,
+      "median": 104.0,
+      "min": 96
+    },
+    "table_row_totals_replica_a": {
+      "adamon_entities": 543,
+      "associations": 28,
+      "attention_decisions": 3299,
+      "binding_hypotheses": 2874,
+      "binding_reviews": 10,
+      "cognitive_activations": 15,
+      "cognitive_actors": 394,
+      "cognitive_alternatives": 72,
+      "cognitive_appraisals": 29,
+      "cognitive_attention": 50,
+      "cognitive_attention_items": 74,
+      "cognitive_choices": 49,
+      "cognitive_commitment_revisions": 29,
+      "cognitive_commitments": 26,
+      "cognitive_contexts": 68,
+      "cognitive_desire_states": 422,
+      "cognitive_desires": 416,
+      "cognitive_development_causes": 135,
+      "cognitive_episodes": 187,
+      "cognitive_executions": 14,
+      "cognitive_field_entries": 315,
+      "cognitive_fields": 184,
+      "cognitive_input_influences": 5,
+      "cognitive_integrations": 186,
+      "cognitive_interpretation_parts": 240,
+      "cognitive_interpretations": 157,
+      "cognitive_means": 15,
+      "cognitive_outcomes": 186,
+      "cognitive_perspective_sources": 1379,
+      "cognitive_perspectives": 269,
+      "cognitive_recursions": 72,
+      "cognitive_reintegration": 72,
+      "cognitive_satisfactions": 14,
+      "cognitive_schema": 626,
+      "cognitive_self_inputs": 186,
+      "cognitive_self_links": 186,
+      "cognitive_standings": 315,
+      "cognitive_steps": 1528,
+      "era_beliefs": 98,
+      "era_candidates": 16,
+      "era_events": 50821,
+      "eras": 639,
+      "events": 52426,
+      "evidence_quality": 51426,
+      "evidence_roots": 51436,
+      "experience_events": 28,
+      "experiences": 4542,
+      "identity_seeds": 543,
+      "influence_transfers": 11709,
+      "internal_path_states": 24265,
+      "internal_paths": 12489,
+      "layers": 5634,
+      "manifestations": 5791,
+      "memories": 40713,
+      "observer": 1975233,
+      "organization_assessments": 4,
+      "organization_frontier_entries": 514,
+      "organization_frontiers": 68,
+      "organization_refs": 33323,
+      "organization_relations": 5883,
+      "organization_schema": 374,
+      "organization_steps": 4498,
+      "organization_wholes": 431,
+      "pattern_evidence": 82133,
+      "patterns": 114,
+      "perceived_objects": 1489,
+      "perceived_revisions": 2874,
+      "perceived_worlds": 773,
+      "perception_investigations": 63,
+      "perception_links": 123309,
+      "perception_nodes": 34177,
+      "perception_schema": 626,
+      "perception_stages": 29435,
+      "perception_validation": 16,
+      "percepts": 5790,
+      "perceptual_predictions": 64,
+      "prediction_errors": 63,
+      "predictions": 50521,
+      "reality_event_objects": 1,
+      "reality_objects": 1538,
+      "reality_revisions": 1545,
+      "receptors": 1085,
+      "seed_component_profiles": 5430,
+      "seed_path_profiles": 12489,
+      "self_batch_components": 15430,
+      "self_batch_paths": 35489,
+      "self_development_events": 540,
+      "self_development_evidence": 2700,
+      "self_input_references": 3034,
+      "self_processing_outcomes": 514,
+      "self_processings": 517,
+      "self_states": 1055,
+      "self_transfer_batches": 1543,
+      "state": 2504,
+      "structural_component_states": 10550,
+      "structural_components": 5430,
+      "structural_schema": 626,
+      "structural_steps": 3117,
+      "temporal_observer": 1411,
+      "temporal_schema": 626,
+      "temporal_windows": 785,
+      "world_event_memberships": 10,
+      "world_memberships": 2302,
+      "world_relations": 47
+    },
+    "valid_fixture_count": 407,
+    "verifier_runtime_scope": "first audit per fixture per replica; invalid reopen re-audits are not timed",
+    "verifier_seconds_total": 63.55314556499843
+  },
+  "scope_marker": "HELD_OUT_GENERALISATION_PENDING",
+  "source_files": 127,
+  "source_manifest_artifact": "source_manifest.json",
+  "source_preservation": "PASS",
+  "tier3": {
+    "errors": 0,
+    "exit": 0,
+    "expected_missing": 0,
+    "failures": 0,
+    "outcomes_sha256": "2f215ce14acdbb14c1ee45cd1e597418a7996161720483c2444cb1f383eb603e",
+    "passed": 395,
+    "skips_xfails": 0
+  },
+  "tier3_membership": [
+    "tests/integration/test_organization.py",
+    "tests/integration/test_organization_m2.py",
+    "tests/integration/test_organization_m2_canonical_values.py",
+    "tests/integration/test_organization_m2_merge.py",
+    "tests/integration/test_organization_m2_merge_projection.py"
+  ],
+  "verifier_byte_preservation": "PASS"
+}
