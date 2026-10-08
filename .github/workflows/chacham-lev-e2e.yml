@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  CHACHAM_LEV_SHA: 904b280ecb8c0d72a7241079a846f5d263b02feb
+  CHACHAM_LEV_SHA: 8fb993f64e4db03754503a61960bbf2091c8ca74
   NEXT_TELEMETRY_DISABLED: 1
   NODE_OPTIONS: --max-old-space-size=4096
   E2E_BASE_URL: http://127.0.0.1:3000
