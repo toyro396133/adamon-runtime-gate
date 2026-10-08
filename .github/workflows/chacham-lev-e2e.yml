@@ -1,0 +1,261 @@
+name: Chacham Lev full E2E
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/chacham-lev-e2e.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chacham-lev-full-e2e
+  cancel-in-progress: false
+
+env:
+  CHACHAM_LEV_SHA: 904b280ecb8c0d72a7241079a846f5d263b02feb
+  NEXT_TELEMETRY_DISABLED: 1
+  NODE_OPTIONS: --max-old-space-size=4096
+  E2E_BASE_URL: http://127.0.0.1:3000
+
+jobs:
+  main-system-e2e:
+    name: Main system E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: chacham_lev_main_e2e
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chacham_lev_main_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_main_e2e
+    steps:
+      - name: Require private-source read token
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          test -n "$READ_TOKEN" || { echo "ENVIRONMENT: missing CHACHAM_LEV_READ_TOKEN"; exit 2; }
+
+      - name: Checkout pinned private Chacham Lev source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.CHACHAM_LEV_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+
+      - name: Verify source SHA
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$CHACHAM_LEV_SHA"
+          echo "Chacham Lev source: $CHACHAM_LEV_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Generate isolated runtime credentials
+        working-directory: source
+        shell: bash
+        run: |
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        working-directory: source
+        run: |
+          pnpm add --save-dev --lockfile=false @playwright/test@1.55.0
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Type-check E2E harness
+        working-directory: source
+        run: pnpm exec tsc --noEmit -p e2e/tsconfig.json
+
+      - name: Create disposable database schema
+        working-directory: source
+        run: pnpm exec prisma db push --skip-generate
+
+      - name: Seed shared fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-mobile-system.ts
+
+      - name: Seed main-system fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-main-system.ts
+
+      - name: Build production application
+        working-directory: source
+        run: pnpm run build
+
+      - name: Start production application
+        working-directory: source
+        run: |
+          pnpm exec next start -H 127.0.0.1 -p 3000 > "$RUNNER_TEMP/chacham-main-e2e-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/chacham-main-e2e-server.pid"
+
+      - name: Wait for application
+        shell: bash
+        run: |
+          for i in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/login > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Application failed to become ready"
+          exit 1
+
+      - name: Run comprehensive main-system browser suite
+        working-directory: source
+        run: pnpm exec playwright test e2e/main-system.spec.ts
+
+      - name: Summarize
+        if: always()
+        run: |
+          echo "## Main system E2E" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: `$CHACHAM_LEV_SHA`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Disposable PostgreSQL: yes" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Private source retained: no" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove private source
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/source"
+
+  mobile-system-e2e:
+    name: Mobile system E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: chacham_lev_e2e
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chacham_lev_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_e2e
+    steps:
+      - name: Require private-source read token
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          test -n "$READ_TOKEN" || { echo "ENVIRONMENT: missing CHACHAM_LEV_READ_TOKEN"; exit 2; }
+
+      - name: Checkout pinned private Chacham Lev source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.CHACHAM_LEV_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+
+      - name: Verify source SHA
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$CHACHAM_LEV_SHA"
+          echo "Chacham Lev source: $CHACHAM_LEV_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Generate isolated runtime credentials
+        working-directory: source
+        shell: bash
+        run: |
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        working-directory: source
+        run: |
+          pnpm add --save-dev --lockfile=false @playwright/test@1.55.0
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Type-check E2E harness
+        working-directory: source
+        run: pnpm exec tsc --noEmit -p e2e/tsconfig.json
+
+      - name: Create disposable database schema
+        working-directory: source
+        run: pnpm exec prisma db push --skip-generate
+
+      - name: Seed mobile-to-management fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-mobile-system.ts
+
+      - name: Build production application
+        working-directory: source
+        run: pnpm run build
+
+      - name: Start production application
+        working-directory: source
+        run: |
+          pnpm exec next start -H 127.0.0.1 -p 3000 > "$RUNNER_TEMP/chacham-mobile-e2e-server.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/chacham-mobile-e2e-server.pid"
+
+      - name: Wait for application
+        shell: bash
+        run: |
+          for i in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/login > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Application failed to become ready"
+          exit 1
+
+      - name: Run comprehensive mobile-to-management browser suite
+        working-directory: source
+        run: pnpm exec playwright test e2e/mobile-system.spec.ts
+
+      - name: Summarize
+        if: always()
+        run: |
+          echo "## Mobile system E2E" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: `$CHACHAM_LEV_SHA`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Disposable PostgreSQL: yes" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Private source retained: no" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove private source
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/source"
