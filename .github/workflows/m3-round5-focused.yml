@@ -1,4 +1,4 @@
-name: M3 Round 5 focused harness gate
+name: M3 Round 5 full preparation and image-authority gate
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: m3-round5-focused
+  group: m3-round5-full
   cancel-in-progress: false
 
 jobs:
@@ -51,7 +51,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: toyro396133/cognitive-zero
-          ref: d3baa3bb12f591d5b35cdf8676f14667f4444537
+          ref: 681ac9af32719d7499be6ab0a73c146b9ba78295
           token: ${{ secrets.COGNITIVE_ZERO_READ_TOKEN }}
           persist-credentials: false
           path: private-source
@@ -62,8 +62,8 @@ jobs:
         shell: bash
         run: |
           actual=$(git rev-parse HEAD)
-          test "$actual" = d3baa3bb12f591d5b35cdf8676f14667f4444537
-          echo 'Verified source HEAD: d3baa3bb12f591d5b35cdf8676f14667f4444537' >> "$GITHUB_STEP_SUMMARY"
+          test "$actual" = 681ac9af32719d7499be6ab0a73c146b9ba78295
+          echo 'Verified source HEAD: 681ac9af32719d7499be6ab0a73c146b9ba78295' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -75,12 +75,81 @@ jobs:
         shell: bash
         run: python -m compileall -q scripts/m3
 
-      - name: Run Round 5 adversarial suite
+      - name: Regenerate coverage and preliminary DRAFT
         working-directory: private-source
         shell: bash
         run: |
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.m3.common import encode
+          from scripts.m3.coverage import matrix
+          from scripts.m3.configuration import draft
+          root=Path.cwd()
+          (root/'docs/gen0_5A_M3_contract_coverage.json').write_bytes(encode(matrix()))
+          (root/'docs/gen0_5A_M3_generation_config.draft.json').write_bytes(encode(draft(root)))
+          PY
+
+      - name: Pull exact pinned Docker base
+        working-directory: private-source
+        shell: bash
+        run: docker pull python:3.12.14-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
+
+      - name: Build and seal exact execution image authority
+        working-directory: private-source
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import tempfile
+          from scripts.m3.common import read,encode,FROZEN_APP_MANIFEST_PATH
+          from scripts.m3.configuration import draft
+          from scripts.m3.isolation import build_context,build_image
+          root=Path.cwd()
+          config_path=root/'docs/gen0_5A_M3_generation_config.draft.json'
+          config=read(config_path)
+          manifest=read(root/FROZEN_APP_MANIFEST_PATH)
+          with tempfile.TemporaryDirectory(prefix='m3-round5-build-') as temporary:
+              context=Path(temporary)/'context'
+              build_context(root,manifest,context,config)
+              build_image(
+                  context,config,
+                  root/'docs/gen0_5A_M3_execution_image_authority.draft.json')
+          config_path.write_bytes(encode(draft(root)))
+          PY
+
+      - name: Full non-materializing preparation suites
+        working-directory: private-source
+        shell: bash
+        run: |
+          python -m scripts.m3.selftest
+          python -m scripts.m3.repair_selftest
+          python -m scripts.m3.round3_selftest
+          python -m scripts.m3.round4_selftest
           python -m scripts.m3.round5_selftest
-          echo 'ROUND5_FOCUSED_PASS' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Emit sanitized Round 5 authority summary
+        working-directory: private-source
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json,hashlib
+          from scripts.m3.common import read
+          root=Path.cwd()
+          coverage=root/'docs/gen0_5A_M3_contract_coverage.json'
+          draft=root/'docs/gen0_5A_M3_generation_config.draft.json'
+          image_path=root/'docs/gen0_5A_M3_execution_image_authority.draft.json'
+          d=read(draft)
+          image=read(image_path)
+          print('ROUND5_FULL_GATE_PASS')
+          print('COVERAGE_SHA256='+hashlib.sha256(coverage.read_bytes()).hexdigest())
+          print('DRAFT_SHA256='+hashlib.sha256(draft.read_bytes()).hexdigest())
+          print('PHASE_SOURCE_REGISTRY_HASH='+d['phase_source_registry_hash'])
+          print('IMAGE_AUTHORITY_SHA256='+hashlib.sha256(image_path.read_bytes()).hexdigest())
+          print('IMAGE_AUTHORITY_JSON='+json.dumps(image,sort_keys=True,separators=(',',':')))
+          print('ALL_HARNESS_SOURCE_COUNT='+str(len(d['all_harness_sources'])))
+          print('IMAGE_AUTHORITY_STATUS='+d['execution_image_authority']['status'])
+          PY
 
       - name: Remove private source and raw evidence
         if: always()
