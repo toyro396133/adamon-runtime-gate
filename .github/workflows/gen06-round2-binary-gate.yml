@@ -56,7 +56,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: toyro396133/cognitive-zero
-          ref: 9c1858bd487ae457dddbb196f5283bfbc18a58fe
+          ref: 751b4608ada3b560872df37ac8f23c0f728330ea
           token: ${{ secrets.COGNITIVE_ZERO_READ_TOKEN }}
           persist-credentials: false
           path: private-source
@@ -67,7 +67,7 @@ jobs:
         working-directory: private-source
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "9c1858bd487ae457dddbb196f5283bfbc18a58fe"
+          test "$(git rev-parse HEAD)" = "751b4608ada3b560872df37ac8f23c0f728330ea"
           test -f .github/audit/gen06_round2_binary_verify.py
           test -f docs/gen0_6_round2_audit_repair/sqlite_access_manifest.json
           test -f docs/gen0_6_round2_T2_measurement_evidence.tar.gz
