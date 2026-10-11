@@ -43,3 +43,13 @@ runtime blockers. Synthetic tests check configuration and fail-closed ordering
 only. They start no VM and are not T3 or a security isolation proof.
 
 Run synthetic tests: `python -m unittest discover -s infrastructure/t3/runtime/tests -v`.
+
+## 2026-10-11 — Guest completion inventory hardening
+
+The signed Guest completion reader now rejects artifact IDs that are not 64
+lowercase SHA256 hex characters, duplicate object IDs, invalid/null/latest
+VersionIds, zero-sized or bool-sized artifacts, out-of-range sizes and malformed
+signature encodings. Added negative test fixtures exercising syntactically signed
+but invalid references. The published repository contains tests; the full public
+test suite was not run in this session, and real S3 readback remains UNVERIFIED.
+No research entry point was enabled.
