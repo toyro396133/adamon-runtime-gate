@@ -54,6 +54,19 @@ def main():
                     diagnostic["last_completed_stage"] = name
                 else:
                     diagnostic["next_stage"] = "FINAL_ASSERTION"
+                raw_message = str((result.get("failure") or {}).get("message") or "")
+                safe_failures = (
+                    ("SQLite integrity failed", "SQLITE_INTEGRITY_CHECK"),
+                    ("SQLite foreign key failure", "SQLITE_FOREIGN_KEYS"),
+                    ("Global Verifier failed", "GLOBAL_VERIFIER"),
+                    ("Verification changed original source", "SOURCE_SHA_CHANGED"),
+                )
+                diagnostic["error_category"] = next((code for prefix, code in safe_failures
+                                                     if raw_message.startswith(prefix)), "UNCLASSIFIED")
+                import re
+                completed = re.findall(r"SQLITE SEMANTIC VERIFIED:\s*(\d+)\s*/23",
+                                       private_log.read_text(encoding="utf-8", errors="ignore"))
+                diagnostic["sqlite_object_checks_completed"] = int(completed[-1]) if completed else 0
                 kind = (result.get("failure") or {}).get("type")
                 if kind in ("AssertionError", "KeyError", "TypeError", "ValueError", "OSError", "ImportError", "ModuleNotFoundError", "IndexError", "OperationalError", "DatabaseError", "AttributeError"):
                     diagnostic["error_kind"] = kind
