@@ -94,3 +94,21 @@ executed files. These tests are not authenticated GitHub Job preflight:
 no live owner token, signed deployment, real-run correlation, worker pidfd
 or execution freeze has been proven. The adapter is injected into a future
 privileged Supervisor; no public HTTP enrollment or workflow is installed.
+
+## חיבור Runtime נוסף — 2026-10-11
+
+`RunnerAssignmentBinder` מקבל את מפענח המקור המוצמד, קושר את `job.check_run_id` ל־`check_run_url` מה־REST ול־Runner ID מתוך תצורת Supervisor, ורק אז מפיק Actions Job ID. GUID של orchestration, Check Run ID ו־Job ID אינם מוחלפים זה בזה. `workflow_sha` הוא commit SHA; מזהה blob נשמר בנפרד. ניסיון ההרצה נקשר ל־endpoint של attempt גם כשה־Job JSON אינו כולל שדה `run_attempt`.
+
+`NativeProcessFactory` מחבר executable FD מוצמד, UID נפרד ו־cgroup FD ל־clone3, שחרור הילד, exec acknowledgement עם timeout ו־ProcessRecord מבוסס pidfd שנוצר בלידה. `NativeWorkerSpawner` מעביר את שני pipe FDs ואת ערוץ ה־Worker הפרטי בפועל, משאיר endpoint ב־Supervisor ומטפל בהודעות עד ביטול. `EnrolledJobWatchdog` מחבר אימות ProcessRecord, קורלציית REST וחידוש ledger; סיום מקומי מבטל lease בלי ליצור היתר חדש.
+
+אלה חיבורי קוד ממשיים אך **אינם ראיית deployment**: clone3 עם cgroup/namespace/UID, תמונת immutable, LSM, Listener networking ו־Launcher image עדיין זקוקים ל־Preflight במארח מורשה. factory אינו מרשה argv של Firecracker ואינו תחליף ל־VMM launcher סגור. REST לא אומת מול GitHub חי כאן; מבחני JSON הם סינתטיים. `fixed_step_execute` נשאר חסום ללא סמכות ביצוע מאושרת. ה־transport משתמש ב־proxy וב־CA של הסביבה ואינו עוקף אותם.
+
+`connect_native_supervisor(...)` מרכיב ישירות את מפענח `Runner` המוצמד, REST, הקישור Check/Job/Runner ו־Native Worker factory. אין צורך להמציא מתאם Assignment נוסף. ה־factory אינו מנפיק סמכות ביצוע.
+
+`SessionController.open()` מבצע בפועל אימות peer לתהליך Launcher שנשמר, mTLS 1.3, SPKI והרחבת binding קריטית, challenge חד־פעמי קשור exporter/request, הוכחת Ed25519 וצריכה אטומית ב־ledger. תוצאתו היא `AUTHENTICATED_ONLY`, ללא API להפעלת מחקר. במבחן החיבור בוצעו TLS, חתימות, socket peer ו־SQLite אמיתיים; קורלציית GitHub ותצורת בעלים נשארו סינתטיות ולא הוצגו כראיית GitHub Runtime.
+
+בדיקת cancellation נוספת הורגת שני תהליכים מקומיים אמיתיים באמצעות pidfd, מסיימת lease ב־SQLite ושומרת קובץ partial. היא **אינה** מוכיחה הריגת cgroup שלם, הפרדת UID או Job מרוחק. ספריית native נטענת מעותק memfd אטום של אותם בתים שאומתו ב־SHA256, כדי להסיר מרוץ pathname בין hash ל־dlopen. מבחני GCC ומפתחות memfd אמיתיים עברו.
+
+מנפיק Bootstrap שולח uint32 באורך big-endian, JSON סגור עם certificate/binding/SPKI, ו־FD אחד עם מפתח 32 בתים אטום. מנגנון הנפקה מבוזר/attestation של guard ומארח GitHub מורשה עדיין דורש בדיקה. הרכבת Namespace רשת של Listener ו־Worker עדיין אינה ממומשת; namespace חדש ללא הגדרת רשת אינו proof ל־Runner מחובר.
+
+קשירת Session עודכנה לשמות permit בסכמה הקפואה: `repository_id`, ‏`workflow_path`, ‏`workflow_sha`, ‏`ref`, ‏`commit_sha`, ‏`step_sha256`, וכן `worker_job_guid`, ‏`worker_request_id`, ‏`plan_guid`. כולם נבדקים מול Assignment מנורמל; שדה חסר נכשל סגור. מזהה repository נבדק גם מתוך REST. תשעה permits חתומים עם tuple שגוי ו־Job/assignment digest נכונים נדחו לפני TLS; אלה ראיות לוגיקה/חתימות/ledger מקומיות ולא אישור GitHub חי.

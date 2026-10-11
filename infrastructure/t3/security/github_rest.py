@@ -60,25 +60,26 @@ class GitHubApi:
             run.get('event') != 'workflow_dispatch' or
             run.get('status') != 'in_progress' or
             type(run.get('repository')) is not dict or
-            run['repository'].get('full_name') != self.repository):
+            run['repository'].get('full_name') != self.repository or
+            type(run['repository'].get('id')) is not int or not 0<run['repository']['id']<=2**53-1):
             raise IdentityUnavailable('wrong Actions run identity/status')
         head_sha = run.get('head_sha')
         path = run.get('path')
         branch = run.get('head_branch')
         if (type(head_sha) is not str or _SHA40.fullmatch(head_sha) is None or
             type(path) is not str or not path.startswith('.github/workflows/') or
-            path.count('@') != 1 or type(branch) is not str):
+            path.count('@') > 1 or type(branch) is not str):
             raise IdentityUnavailable('missing run source identity')
-        workflow_path, workflow_ref = path.split('@', 1)
+        workflow_path, workflow_ref = path.split('@', 1) if '@' in path else (path,'refs/heads/'+branch)
         if workflow_ref != 'refs/heads/' + branch or not re.fullmatch(r'\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml', workflow_path):
             raise IdentityUnavailable('noncanonical dispatch workflow/ref')
         obj = self._read('/contents/' + workflow_path + '?ref=' + head_sha)
         blob_sha = obj.get('sha')
         if type(blob_sha) is not str or _SHA40.fullmatch(blob_sha) is None or obj.get('type') != 'file':
             raise IdentityUnavailable('unverifiable workflow source blob')
-        return dict(workflow_ref=path, workflow_sha=blob_sha,
+        return dict(workflow_ref=self.repository+'/'+workflow_path+'@'+workflow_ref, workflow_sha=head_sha, workflow_blob_sha=blob_sha,
                     ref=workflow_ref, head_sha=head_sha,
-                    run_id=run_id, run_attempt=attempt, repository=self.repository)
+                    run_id=run_id, run_attempt=attempt, repository=self.repository, repository_id=run['repository']['id'])
 
     def list_jobs(self, run_id, attempt):
         self._ids(run_id, attempt)
@@ -92,14 +93,18 @@ class GitHubApi:
         for job in jobs:
             if type(job) is not dict:
                 raise IdentityUnavailable('invalid job record')
-            for field in ('id','run_id','run_attempt','runner_id'):
+            for field in ('id','run_id','runner_id'):
                 if type(job.get(field)) is not int or job[field] <= 0 or job[field] > 2**53-1:
                     raise IdentityUnavailable('missing numeric job binding')
-            if job['run_id'] != run_id or job['run_attempt'] != attempt:
+            if job['run_id'] != run_id or ('run_attempt' in job and (type(job['run_attempt']) is not int or job['run_attempt'] != attempt)):
                 raise IdentityUnavailable('wrong job attempt')
             if job.get('status') not in ('queued','in_progress','completed','waiting'):
                 raise IdentityUnavailable('unknown job state')
-            out.append(dict(job_id=job['id'],run_id=run_id,run_attempt=attempt,
+            check_url=job.get('check_run_url')
+            check_match=re.fullmatch(r'https://api\.github\.com/repos/'+re.escape(self.repository)+r'/check-runs/([1-9][0-9]*)',check_url) if type(check_url) is str else None
+            if check_match is None or int(check_match[1])>2**53-1:
+                raise IdentityUnavailable('missing independently bound check run')
+            out.append(dict(job_id=job['id'],check_run_id=int(check_match[1]),run_id=run_id,run_attempt=attempt,
                             runner_id=job['runner_id'],status=job['status']))
         return out
 
@@ -118,7 +123,7 @@ class OwnerAuthenticatedTransport:
         self.token_provider, self.timeout = token_provider, timeout
         self.context = ssl.create_default_context()
         self.opener = urllib.request.build_opener(
-            urllib.request.ProxyHandler({}),
+            urllib.request.ProxyHandler(),
             urllib.request.HTTPSHandler(context=self.context),
             _NoRedirect())
 

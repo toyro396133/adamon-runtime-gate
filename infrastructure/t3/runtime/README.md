@@ -53,3 +53,11 @@ signature encodings. Added negative test fixtures exercising syntactically signe
 but invalid references. The published repository contains tests; the full public
 test suite was not run in this session, and real S3 readback remains UNVERIFIED.
 No research entry point was enabled.
+
+## המשך Runtime — 2026-10-11
+
+`injection.py` קושר חתימת Ed25519 למזהי Job/Assignment/Permit, למקור ול־fixture לפי SHA256, למפתח החתימה המדויק של Guest, לתפוגה ולצריכה חד־פעמית. מקור ו־fixture מוחזרים כבתים למתאם סגור; אין חילוץ נתיבים או פקודות מקלט. `vsock.py` מממש handshake מקומי קבוע של Firecracker ל־port 52. `launcher.py` מאמת FD אטום או filesystem לקריאה בלבד, זהות jail ו־UID מופחת, ומגדיר exec קבוע ו־API מקומי המאומת ב־SO_PEERCRED. `watchdog.py` רץ בתהליך מפקח נפרד ומטפל במות supervisor, deadline וביטול באמצעות cgroup.kill ו־pidfd fallback, תוך שמירת סמן partial.
+
+שש בדיקות `integration_tests/test_runtime_guest_process.py` מפעילות תהליך Guest אמיתי דרך AF_UNIX, handshake, הזרקה חתומה ומאומתת, קבלת completion חתומה, סירוב replay/Job/מפתח שגויים, FD אטום ו־SIGKILL אמיתי דרך pidfd. הן אינן מריצות Firecracker או מוכיחות בידוד KVM או cgroup.
+
+**חסם חיבור מפורש:** שלב birth של VMM חייב להסתיים לפני הנפקת credential והתקנת native launcher mutation guard, שאוסר clone/exec. פונקציית native spawn אינה מתקינה guard בעצמה. LocalLauncher.prepare מממש סדר birth ואז guard ואז קבלת FD אטום בערוץ מקומי של המנפיק; אין לשלב Popen אחרי guard. ה־executable של Launcher ותהליך ה־broker המנפיק טרם הופעלו כשרשרת שלמה על KVM, ואין להציג חיבור זה כמוכח. חסרים executable/image של Launcher, Firecracker, kernel/rootfs חתומים, mounts מוצפנים, תהליך watchdog ב־UID/cgroup נפרדים והקצאת GitHub Job אמיתית. אין אישור ביצוע מחקר; הכניסה המחקרית חסומה. אין שימוש בתשתית בתשלום, workflow או T3/T4.

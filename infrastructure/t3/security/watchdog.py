@@ -72,3 +72,34 @@ class JobWatchdog:
                     return self._stop(reason)
             self.last_confirmed = now
             return None
+
+class EnrolledJobWatchdog:
+    """Concrete retained-process/REST/ledger heartbeat, no execution capability."""
+    def __init__(self, *, supervisor, launcher, ledger, permit_id, session,
+                 kill_cgroup, preserve_partial, deadline, interval=5):
+        from .process import ProcessRecord
+        if not isinstance(launcher,ProcessRecord) or not 0<interval<=10:
+            raise WatchdogFailure('retained launcher and bounded heartbeat required')
+        self.supervisor,self.launcher,self.ledger=supervisor,launcher,ledger
+        self.permit_id,self.session,self.interval=permit_id,session,interval
+        def alive(record):
+            record.verify();return True
+        def assignment():
+            dispatch=supervisor.dispatch
+            if dispatch is None or dispatch.revoked: return False
+            supervisor.correlate(dispatch.assignment)
+            ledger.renew(permit_id,session,verified_job_live=True)
+            return True
+        self.policy=JobWatchdog(worker_alive=lambda:alive(supervisor._worker()),
+            launcher_alive=lambda:alive(launcher),assignment_active=assignment,
+            permit_live=lambda:ledger.session_live(permit_id,session),
+            revoke=lambda reason:ledger.end_session(permit_id,session,reason),
+            kill_cgroup=kill_cgroup,preserve_partial=preserve_partial,deadline=deadline)
+        self.cancelled=threading.Event()
+    def cancel(self):
+        self.cancelled.set()
+    def run(self):
+        while True:
+            reason=self.policy.poll(cancelled=self.cancelled.is_set())
+            if reason is not None:return reason
+            self.cancelled.wait(self.interval)

@@ -113,3 +113,20 @@ class Ledger:
                 if prev!=previous or hashlib.sha256(prev.encode()+entry).hexdigest()!=current: raise Denied('ledger chain')
                 previous=current
         return previous
+    def session_live(self, permit_id, session):
+        """Read authoritative consumed lease; cannot grant or renew authority."""
+        from .protocol import decode
+        now=int(self.clock())
+        with self.connect() as db:
+            row=db.execute('SELECT payload,state,session,lease FROM permits WHERE id=?',(permit_id,)).fetchone()
+            revoked=db.execute('SELECT 1 FROM revocations WHERE id=?',(permit_id,)).fetchone()
+        return bool(row and not revoked and row[1]=='CONSUMED' and row[2]==session and now<row[3] and now<decode(row[0])['execution_deadline'])
+    def end_session(self, permit_id, session, reason):
+        """Local supervisor may reduce consumed authority, never issue/reissue it."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            changed=db.execute("UPDATE permits SET lease=0 WHERE id=? AND state='CONSUMED' AND session=?",(permit_id,session)).rowcount
+            if changed:
+                self.event(db,dict(action='SESSION_ENDED',permit=permit_id,session=session,reason=reason))
+            db.commit()
+        return bool(changed)

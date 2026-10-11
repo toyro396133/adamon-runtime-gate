@@ -39,3 +39,5 @@ The `cryptography` package is required. No keys are committed or written by this
 code. Separate IAM broker/reviewer credentials and signer issuance are prerequisites.
 
 Run synthetic tests: `python -m unittest discover -s infrastructure/t3/storage/tests -v`.
+
+חיבור הקבצים בפועל נמצא ב־`chain.py`: `InventoryProducer` חותם מלאי של תוצרים שהתקבלו דרך `put`; `SignedInventoryReader` מאמת חתימות, SHA256 של המלאי, ניסיון/סמכות, VersionId, גודל וכל בת חזרה. ממשק הקורא אינו מציע כתיבה, מחיקה, latest או נתיב חופשי. שמות קבצים פרטיים ממופים לתוויות אטומות רשומות (למשל `life_sqlite`), ואינם מתפרסמים בממשק הציבורי. בדיקות החיבור מפעילות AES-GCM, Ed25519 ו־SQLite מקומי בפועל; אין בכך הוכחת Object Lock או הרשאות AWS. ראיות חלקיות ניתנות לשימור אך נדחות בקריאה המיועדת לקבלה.

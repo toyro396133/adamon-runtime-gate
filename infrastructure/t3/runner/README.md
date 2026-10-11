@@ -43,7 +43,7 @@ DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet build src/Runner.Listener/Runner.Listener.c
 החבילה אינה runner מותקן, אינה execution freeze ואינה הרשאה למחקר.
 
 המוביל אימת מחדש החלה על checkout נקי ומוצמד. source tree המתקבל הוא
-`db277ecf8ca79d1d78ea57c098670f5f145c2741`, וחותמות ארבעת השינויים וה־overlay
+`6ff195e6613abfd22664e4ae7b847680d5e0c42d`, וחותמות ארבעת השינויים וה־overlay
 ב־`implementation_receipt.json`. `UPSTREAM_LICENSE` משמר את רישיון המקור.
 לא נוצר מאגר fork מרוחק נוסף; ה־patch הציבורי משחזר מקור מותאם מדויק.
 
@@ -53,3 +53,43 @@ DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet build src/Runner.Listener/Runner.Listener.c
 אזהרת CS1701 בגלל הפניה של Newtonsoft ל־System.Runtime6 מול net8.
 שלושה ניסיונות build מלא נעצרו ב־NuGet restore עקב ENOSPC לפני compiler;
 אין תוצאת PASS לבנייה המלאה.
+
+## חיבור Runtime — עדכון המשך
+
+`assignment.py` מפענח את פורמט המקור המוצמד, כולל DictionaryContextData
+מסוג t=2 ו־TemplateToken map. מפענח זה אינו מקור הרשאה: הוא דורש digest
+של ה־Listener המהימן ומעביר זהות לבדיקת REST נפרדת. Job GUID, check_run_id
+ומזהה REST Job נשארים תחומים נפרדים. runner_id חייב לבוא מה־supervisor
+ומהתאמת REST, ולא משדה שה־Workflow בחר. check_run_id נקשר ל־check_run_url
+של Job ולא מונח כשווה ל־job.id. חסר במקור הזהות נכשל סגור.
+
+עיון בקוד המקור האמיתי גילה ש־MappingToken.Count הוא internal ל־Sdk
+ואינו חשוף ל־Runner.Common. תוקן השימוש ל־Enumerable.Count(), דרך הממשק
+הציבורי IEnumerable. Transport doubles עודכנו בהתאם, אך אינם מוכיחים
+תאימות מלאה. debugger, snapshot, job output ו־ActionsEnvironment נדחים כעת.
+
+20 בדיקות Python עברו, ובהן 13 בקרות פענוח שליליות/חיוביות; שבע בדיקות
+תעבורה אמיתיות עברו שוב על ה־bridge המעודכן. ניסיון build ללא restore
+נעצר ב־NETSDK1004 כי project.assets.json לא קיים. בסביבה היו כ־284MiB
+פנויים ב־workspace וכ־81MiB ב־tmp; לא נמחקה ראיה היסטורית ולא נבחרה
+סביבת בנייה חלופית בלתי מורשית. אין ראיית build מלא או Job מאומת חי.
+
+מקורות לעיון: src/Sdk/DTPipelines/Pipelines/ContextData/PipelineContextDataJsonConverter.cs,
+src/Runner.Worker/JobContext.cs, src/Sdk/DTObjectTemplating/ObjectTemplating/Tokens/TemplateTokenJsonConverter.cs,
+src/Sdk/DTObjectTemplating/ObjectTemplating/Tokens/MappingToken.cs ו־src/Sdk/InternalsVisibleTo.cs
+ב־commit הציבורי המוצמד לעיל.
+
+נבדק גם JsonUtility.cs:255: ה־serializer המוצמד משתמש ב־VssJsonMediaTypeFormatter
+עם camelCase resolver. לכן המפענח מקבל contextData/jobId/steps ו־map key/value
+ולא DTO בדיקה עם PascalCase. ערבוב אותיות או כפילויות נדחים.
+
+### קשירת היתר — מזהה repository וטביעת Step
+
+המפענח דורש גם github.repository_id חיובי, ש־REST צריך לאמת מול מזהה
+המאגר. step_sha256 מחושב כ־SHA256 של כל אובייקט Step המפוענח בפורמט
+`security.protocol.canonical`: מפתחות ממוינים, ASCII, ללא whitespace,
+מספרים שלמים בטווח הבטוח וללא float. ה־raw assignment digest נשאר עוגן
+נפרד לבתים המקוריים. הגדרת קידוד זו היא החלטת מימוש prospective לתשתית,
+ואינה משנה סמכות מחקר או מתיימרת להיות SHA של מקטע JSON מקורי.
+Step Unicode או מספר float שאינם מתקבלים ב־codec נדחים סגור. היתר הבעלים
+חייב להשתמש באותה הגדרה בדיוק; אין קבלה של hash שנבחר על ידי Workflow.

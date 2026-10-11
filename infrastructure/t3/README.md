@@ -35,3 +35,9 @@ Runner, שירותי האחסון וההרשאות שעדיין לא נבדקו.
 `T3_INFRASTRUCTURE_IMPLEMENTATION_PARTIAL`. נוספו גם `runtime/` ו־`integration_tests/`. 136 בדיקות מרכזיות וארבע בדיקות משנה עברו בשני המאגרים; שבע בדיקות transport עברו ב־C# עם upstream type doubles. אין להסיק מכך שה־Runner המלא נבנה או שבידוד privileged נבדק. ניסיונות restore של ה־Runner המלא נעצרו בשל ENOSPC.
 
 חסרים חיבורי deployment מאומתים בין הקצאת GitHub, supervisor, Launcher ותמונת guest, וכן כיסוי מדידות וסגירת כל שערי הקבלה. נקודות הכניסה המחקריות חסומות ללא אפשרות הפעלה. נדרשים השלמת קוד וביקורת מימוש, ולא רק הפעלת preflight.
+
+## 2026-10-11 — המשך חיבור Runtime
+
+נוספו מפענח Assignment לפי המקור המוצמד, חיבור REST–Worker–Supervisor, מפעל תהליכים native, Session mTLS/challenge/ledger, הזרקת מקור מאומתת ושרשרת ראיות חתומה. בדיקות הבתים וה־bootstrap מחוברות בפועל בין הרכיבים. 209 בדיקות ו־17 בדיקות משנה עברו בשני המאגרים; שבע בדיקות C# transport עברו בנפרד. זו תערובת של unit/synthetic ושל קריפטוגרפיה, sockets ותהליכים מקומיים אמיתיים, ולא הרצת Job ב־Actions.
+
+הסטטוס נשאר PARTIAL: אין רשת ו־mounts מחוברים ל־namespace, אין Launcher/guest image מוכנים, אין KVM בסביבה, Runner מלא חסום ב־NETSDK1004/אחסון, וכיסוי השערים הפרטי חלקי. אין research entry או terminal PASS מורשים. receipt ומניפסט חדשים משמרים את קבלות הסבב הקודם כהיסטוריה.

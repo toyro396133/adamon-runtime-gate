@@ -85,10 +85,13 @@ class LocalEncryptedStore:
     """
     capability = 'LOCAL_SYNTHETIC_ONLY_NOT_OBJECT_LOCK'
 
-    def __init__(self, database: Path, encryption_key: bytes, signer: Ed25519PrivateKey, key_id: str):
+    def __init__(self, database: Path, encryption_key: bytes, signer: Ed25519PrivateKey, key_id: str, *, storage_scope_sha256=sha(b'LOCAL_SYNTHETIC_ONLY')):
         if len(encryption_key) != 32 or not key_id:
             raise StorageFailure('invalid key configuration')
         self.database, self.aead, self.signer, self.key_id = database, AESGCM(encryption_key), signer, key_id
+        if type(storage_scope_sha256) is not str or not HEX.fullmatch(storage_scope_sha256):
+            raise StorageFailure('exact storage scope required')
+        self.storage_scope_sha256 = storage_scope_sha256
         self.public_key = signer.public_key()
         with self._connect() as connection:
             connection.executescript('''
@@ -114,7 +117,7 @@ class LocalEncryptedStore:
             raise StorageFailure('bytes required')
         reference = EvidenceRef(sha(data), str(uuid.uuid4()), sha(data), len(data))
         until = (datetime.now(timezone.utc) + timedelta(days=365)).isoformat()
-        envelope = signed(reference, state, until, self.key_id, self.signer)
+        envelope = signed(reference, state, until, self.key_id, self.signer, self.storage_scope_sha256)
         nonce = os.urandom(12)
         aad = canonical(envelope.payload())
         ciphertext = self.aead.encrypt(nonce, data, aad)

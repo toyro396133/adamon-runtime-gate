@@ -37,6 +37,13 @@ class Aggregator:
     def __init__(self,registry,verifier,immutable_reader):
         registry.validate();self.registry=registry;self.verifier=verifier;self.reader=immutable_reader
     def _manifest(self,reference):
+        import re
+        if (type(reference) is not dict or set(reference)!={'object_id','version_id','sha256','size_bytes'}
+            or type(reference['sha256']) is not str or re.fullmatch('[0-9a-f]{64}',reference['sha256']) is None
+            or reference['object_id']!=reference['sha256'] or type(reference['size_bytes']) is not int
+            or reference['size_bytes']<0 or type(reference['version_id']) is not str
+            or not reference['version_id'] or reference['version_id'] in ('null','latest')):
+            raise ReceiptError('exact signed audit version required')
         data=self.reader.read_version(reference['object_id'],reference['version_id'])
         if len(data)!=reference['size_bytes'] or hashlib.sha256(data).hexdigest()!=reference['sha256']:raise ReceiptError('audit manifest bytes mismatch')
         import json
@@ -46,7 +53,11 @@ class Aggregator:
                 if k in result:raise ReceiptError('duplicate manifest key')
                 result[k]=v
             return result
-        return json.loads(data,object_pairs_hook=pairs)
+        try:
+            result=json.loads(data,object_pairs_hook=pairs)
+        except (ValueError,TypeError,UnicodeError) as exc:raise ReceiptError('invalid manifest JSON') from exc
+        if type(result) is not dict:raise ReceiptError('closed manifest object required')
+        return result
     def evaluate(self,receipts):
         expected={(r,s) for s in self.registry.life for r in ('LIFE','AUDIT')}|{(r,s) for s in self.registry.micro for r in ('MICRO','AUDIT')}
         accepted={};permits=set();gates={};controls={}
@@ -62,6 +73,7 @@ class Aggregator:
             if identity[0]=='AUDIT':
                 m=self._manifest(p['audit_manifest'])
                 if set(m)!={'producer_receipt_sha256','gates','controls','failures','errors','skips'} or any(type(m[k]) is not int or m[k]!=0 for k in ('failures','errors','skips')):raise ReceiptError('audit coverage/failure')
+                if type(m['gates']) is not dict or type(m['controls']) is not dict:raise ReceiptError('closed gate/control maps required')
                 producer_role='LIFE' if identity[1] in self.registry.life else 'MICRO'
                 m['_producer_identity']=(producer_role,identity[1]);p=dict(p,_manifest=m);accepted[identity]=p
                 for target,results in ((gates,m['gates']),(controls,m['controls'])):

@@ -45,6 +45,9 @@ def kill_job_cgroup(directory):
     try: os.write(fd,b'1')
     finally: os.close(fd)
 
-def spawn_verified_launcher(*args, **kwargs):
-    """No fork/PID fallback to the unimplemented clone3+LSM isolated spawn."""
-    raise Denied('BLOCKED: clone3/execveat immutable image, UID/namespace/seccomp/LSM preflight not implemented')
+def spawn_verified_launcher(factory=None, bootstrap_fd=None):
+    """Concrete owner-fixed native candidate; no PID/argv or research fallback."""
+    from .native import NativeProcessFactory
+    if not isinstance(factory,NativeProcessFactory) or type(bootstrap_fd) is not int:
+        raise Denied('BLOCKED: retained native factory/bootstrap required')
+    return factory.spawn('LAUNCHER',bootstrap_fd)

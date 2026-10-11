@@ -29,6 +29,16 @@ class SecurityTests(unittest.TestCase):
         return {k:p[k] for k in ('authority_sha256','boot_id','dispatch_id','job_id','run_id','run_attempt','role','subject','client_spki_sha256','request_sha256','assignment_sha256')}
     def issue(self,p):
         return self.ledger.issue(sign(p,self.key,'owner','ADAMON-P4V3-PERMIT'))
+    def test_live_session_local_shutdown_cannot_reissue(self):
+        p=self.issue(self.permit()); self.ledger.consume(p['permit_id'],self.binding(p),'s')
+        self.assertTrue(self.ledger.session_live(p['permit_id'],'s'))
+        self.assertFalse(self.ledger.session_live(p['permit_id'],'other'))
+        self.assertFalse(self.ledger.end_session(p['permit_id'],'other','cancel'))
+        self.assertTrue(self.ledger.end_session(p['permit_id'],'s','cancel'))
+        self.assertFalse(self.ledger.session_live(p['permit_id'],'s'))
+        with self.assertRaises(Denied): self.ledger.renew(p['permit_id'],'s',True)
+        with self.assertRaises(Denied): self.ledger.consume(p['permit_id'],self.binding(p),'s2')
+        self.ledger.verify_chain()
     def test_real_signature_and_tampering(self):
         e=sign(self.permit(),self.key,'owner','ADAMON-P4V3-PERMIT')
         self.assertEqual(verify(e,self.keys,'ADAMON-P4V3-PERMIT'),self.permit())
@@ -132,3 +142,12 @@ class SecurityTests(unittest.TestCase):
         with self.assertRaises(Denied): spawn_verified_launcher()
 
 if __name__=='__main__': unittest.main()
+
+class NativeFactoryConfigurationTests(unittest.TestCase):
+    def test_distinct_uids_and_closed_roles(self):
+        from infrastructure.t3.security.native import NativeProcessFactory
+        from infrastructure.t3.security.protocol import Denied
+        import pytest
+        with pytest.raises(Denied): NativeProcessFactory(None,{})
+        spec=dict(exe_fd=-1,sha256='0'*64,cgroup_fd=-1,cgroup='0::/fixed',uid=1000,gid=1000)
+        with pytest.raises(Denied): NativeProcessFactory(None,{k:dict(spec) for k in ('LISTENER','WORKER','LAUNCHER')})

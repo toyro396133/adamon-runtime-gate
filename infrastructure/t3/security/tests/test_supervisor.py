@@ -4,7 +4,7 @@ from infrastructure.t3.security.supervisor import Supervisor, exact
 
 class CorrelationTests(unittest.TestCase):
     def fixture(self):
-        expected=dict(workflow_ref='r/w@ref',workflow_sha='a'*40,ref='ref',head_sha='b'*40,run_id=2,run_attempt=1,repository='synthetic',runner_id=3)
+        expected=dict(workflow_ref='r/w@ref',workflow_sha='a'*40,ref='ref',head_sha='b'*40,run_id=2,run_attempt=1,repository='synthetic',repository_id=99,runner_id=3)
         assignment=dict(expected,job_id=4)
         class REST:
             def get_run(self,*_): return dict(expected)
@@ -68,3 +68,20 @@ class WorkerLifetimeTests(unittest.TestCase):
             self.assertEqual(reasons,['worker_exit'])
         finally:
             os.close(fd);child.wait()
+
+class AssignmentBindingTests(unittest.TestCase):
+    def test_check_id_not_job_id(self):
+        from infrastructure.t3.security.supervisor import RunnerAssignmentBinder
+        class Rest:
+            def list_jobs(self,*_): return [dict(job_id=81,check_run_id=62,runner_id=4,status='in_progress')]
+        binder=RunnerAssignmentBinder(lambda _:dict(run_id=2,run_attempt=1,check_run_id=62),Rest(),runner_id=4)
+        self.assertEqual(binder({})['job_id'],81)
+        self.assertEqual(binder({})['runner_id'],4)
+    def test_wrong_runner_check_or_ambiguous_denied(self):
+        from infrastructure.t3.security.supervisor import RunnerAssignmentBinder
+        for jobs in ([],[dict(job_id=81,check_run_id=62,runner_id=5,status='in_progress')],
+                     [dict(job_id=81,check_run_id=62,runner_id=4,status='in_progress')]*2):
+            class Rest:
+                def list_jobs(self,*_): return jobs
+            with self.assertRaises(Denied):
+                RunnerAssignmentBinder(lambda _:dict(run_id=2,run_attempt=1,check_run_id=62),Rest(),runner_id=4)({})

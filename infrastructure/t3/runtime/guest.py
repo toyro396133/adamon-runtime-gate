@@ -113,7 +113,7 @@ class GuestClient:
         payload=envelope['payload']
         if type(payload) is not dict or set(payload)!={'version','status','request_sha256','binding','artifacts'}:
             raise Blocked('GUEST_COMPLETION_SCHEMA')
-        if payload['version']!=4 or payload['status']!='COMPLETE' or payload['binding']!=self.binding or payload['request_sha256']!=self.request_sha256:
+        if payload['version']!=4 or payload['status']!='COMPLETE' or canonical(payload['binding'])!=canonical(self.binding) or payload['request_sha256']!=self.request_sha256:
             raise Blocked('GUEST_COMPLETION_BINDING')
         artifacts=payload['artifacts']
         if type(artifacts) is not list or not artifacts or len(artifacts)>4096:
@@ -155,7 +155,7 @@ def serve_guest(stream, exact_binding, adapters, verify_launch, signing_key):
     """
     validate_binding(exact_binding)
     request=receive(stream)
-    if type(request) is not dict or set(request)!={'version','operation','binding','launch_attestation'} or request['version']!=4 or request['operation']!='fixed-role-execute' or request['binding']!=exact_binding:
+    if type(request) is not dict or set(request)!={'version','operation','binding','launch_attestation'} or request['version']!=4 or request['operation']!='fixed-role-execute' or canonical(request['binding'])!=canonical(exact_binding):
         raise Blocked('GUEST_REQUEST_BINDING')
     key=(exact_binding['role'],exact_binding['subject'])
     if key not in adapters or not verify_launch(request['launch_attestation'],exact_binding):

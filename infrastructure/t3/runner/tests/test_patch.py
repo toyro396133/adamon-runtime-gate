@@ -29,7 +29,7 @@ class PatchContracts(unittest.TestCase):
         self.assertIn('DuplicatePropertyNameHandling.Error',code)
         self.assertIn('P4_ASSIGNMENT_MUTATION',code)
         self.assertIn('step.Condition!="success()"',code)
-        self.assertIn('inputs.Count!=1',code)
+        self.assertIn('inputs.Count()!=1',code)
     def test_bootstrap_finite_wait(self):
         code=(ROOT/'overlays/P4ProtectedBridge.cs').read_text()
         self.assertIn('timeout.CancelAfter(TimeSpan.FromSeconds(30))',code)

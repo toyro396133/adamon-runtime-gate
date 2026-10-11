@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -156,11 +157,11 @@ namespace GitHub.Runner.Common
             var message=StringUtil.ConvertFromJson<AgentJobRequestMessage>(raw);
             if(message==null || message.JobId==Guid.Empty || message.RequestId<=0 || message.Plan==null || message.Plan.PlanId==Guid.Empty || message.ContextData==null || !message.ContextData.ContainsKey("github") || message.Steps?.Count!=1)
                 throw new InvalidOperationException("P4_ASSIGNMENT_SHAPE");
-            if(message.JobContainer!=null || message.JobServiceContainers!=null || message.EnvironmentVariables?.Count>0 || message.Defaults?.Count>0)
+            if(message.JobContainer!=null || message.JobServiceContainers!=null || message.EnvironmentVariables?.Count>0 || message.Defaults?.Count>0 || message.EnableDebugger || message.DebuggerTunnel!=null || message.Snapshot!=null || message.JobOutputs!=null || message.ActionsEnvironment!=null)
                 throw new InvalidOperationException("P4_JOB_OVERRIDE");
             if(message.Steps[0] is not ActionStep step || step.Id==Guid.Empty || string.IsNullOrEmpty(step.ContextName) || step.Reference is not ScriptReference || !step.Enabled || step.Background || step.Environment!=null || step.ContinueOnError!=null || step.TimeoutInMinutes!=null || step.ParallelGroupId!=null || step.Condition!="success()")
                 throw new InvalidOperationException("P4_STEP_SHAPE");
-            if(step.Inputs is not MappingToken inputs || inputs.Count!=1 || inputs[0].Key is not StringToken key || key.Value!="script" || inputs[0].Value is not StringToken value || value.Value!=Marker)
+            if(step.Inputs is not MappingToken inputs || inputs.Count()!=1 || inputs[0].Key is not StringToken key || key.Value!="script" || inputs[0].Value is not StringToken value || value.Value!=Marker)
                 throw new InvalidOperationException("P4_LITERAL_MARKER_REQUIRED");
             foreach(System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
                 if(((string)variable.Key).StartsWith("ACTIONS_RUNNER_HOOK_",StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("P4_HOOK_DENIED");
