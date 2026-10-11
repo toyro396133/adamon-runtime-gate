@@ -1,0 +1,35 @@
+{
+  "actual_checks": {
+    "bridge_CSharp_compile": "PASS_WITH_CS1701_REFERENCE_WARNING",
+    "fresh_pinned_checkout_apply": "PASS",
+    "real_Unix_stream_and_SCM_RIGHTS_tests": {
+      "failed": 0,
+      "passed": 7
+    }
+  },
+  "dotnet_host_sha256": "7dda7a639bc35fba05c40d308b0296450aa4e628d109245a6312c385da9b0931",
+  "dotnet_sdk": "8.0.425",
+  "execution_authorized": false,
+  "fork_repository_created": false,
+  "full_fork_build": "BLOCKED_NUGET_RESTORE_ENOSPC_BEFORE_COMPILER",
+  "full_fork_build_attempts": 3,
+  "kind": "SOURCE_PINNED_PATCH_BUILD_RECEIPT",
+  "license_sha256": "621a1e0b6163b9d63fe780b9d6f5a7f775a5781065024a1ebf8010726c44cec1",
+  "patch_sha256": "0d34cced9e9ebfbd334d744812dc052e95df96ba04ccc3b0195276ad2242331d",
+  "patched_source_sha256": {
+    "src/Runner.Common/P4ProtectedBridge.cs": "38c9cf35ad41c7de5cefad9d4d2700b900620992647c78506ca2baad67b5281f",
+    "src/Runner.Listener/JobDispatcher.cs": "45ceb7136940a91333bc7925f06e4db1add5eaabc54d26c8b68a5fc20803f755",
+    "src/Runner.Worker/JobRunner.cs": "46391826dad5639840a79a75f587d23fa720376f2b58bd1c2ab865b12ddec948",
+    "src/Runner.Worker/StepsRunner.cs": "bbbc6ea42efe8ec662632fdbfb1b0af380c1b41d112eeab429395c20ffa98969",
+    "src/Runner.Worker/Worker.cs": "9ae33af765be39fb5c80c1407946d99c9acb2b9a480afa2f9e41d962f0f2df02"
+  },
+  "privileged_spawn_isolation": "UNVERIFIED",
+  "publication": "patch bundle in runtime-gate implementation branch; no additional remote fork required",
+  "registration_broker_legacy": "UNVERIFIED",
+  "research_executed": false,
+  "sdk_archive_sha512_verified": "934b8060a7190e5909ad1fd0785db542f487b3bbf6cdd14826b02095fdd0d0394298b1634085eff302928fccc33f7c1a7253e9b87df555fc36fce819bcd2e798",
+  "source_tree_oid": "db277ecf8ca79d1d78ea57c098670f5f145c2741",
+  "test_scope": "actual bridge source compiled against explicitly named upstream-shape test doubles; not complete Runner fork",
+  "upstream_commit": "197ca027b90de199464dee3bb9ff198a1db60967",
+  "upstream_tag": "v2.338.0"
+}

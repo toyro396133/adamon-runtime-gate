@@ -1,0 +1,22 @@
+# TEMPLATE ONLY. Do not install under .github/workflows until owner review.
+# No LIFE/MICRO/AUDIT/AGGREGATION operation, private checkout or research dispatch.
+name: Proposed nonresearch infrastructure checks
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Replace both placeholder revisions with independently reviewed exact SHAs.
+      - uses: actions/checkout@REQUIRES_OWNER_PIN
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@REQUIRES_OWNER_PIN
+        with:
+          python-version: '3.12'
+      # Dependency lock and wheel hashes must be owner reviewed first.
+      - run: python -m unittest discover -s infrastructure/t3/storage/tests -v
+      - run: python -m unittest discover -s infrastructure/t3/preflight/tests -v

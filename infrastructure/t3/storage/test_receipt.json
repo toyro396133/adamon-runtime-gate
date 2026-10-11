@@ -1,0 +1,17 @@
+{
+  "errors": 0,
+  "execution_authorized": false,
+  "failures": 0,
+  "remote_object_lock_kms_iam_reviewer_canaries": "UNVERIFIED",
+  "research_executed": false,
+  "source_sha256": {
+    "README.md": "acfc5ff7e86a62a3c3d43a20f85674bbead17c834f460250525c98b78e96d357",
+    "evidence.py": "14fee1e2dae90d004e4d55f40fabc58c941c78978b134368895dca8c731ca26a",
+    "inventory.py": "d26181545d034ebca2f4d2a93e418f5b4295666930c01958faf733e7b386315f",
+    "s3.py": "cc5e84eaa4292976f84b637177126f1b90358f32b155de6fd6d494afe1ca73be",
+    "tests/test_inventory.py": "f570b6f7a3b64b02cdc4dd8ba060d8fb7e32cdd86de143706d7b87e793685507",
+    "tests/test_storage.py": "dc50b3e8293293e3922e52357868b285552b998aefdf7e14cf59347c48410f5e"
+  },
+  "status": "SYNTHETIC_TESTS_PASS_NOT_REMOTE_SERVICE_PROOF",
+  "tests_run": 34
+}
