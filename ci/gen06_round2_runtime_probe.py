@@ -14,3 +14,12 @@ with tempfile.TemporaryDirectory(prefix='adamon-r2-private-run-',dir=os.environ.
  if not all(re.fullmatch(r'\d+\.\d+\.\d+',environment[key]) for key in ['python','sqlite']):raise SystemExit('ENVIRONMENT: invalid runtime metadata')
  public={'status':'DIAGNOSTIC_NOT_ACCEPTANCE','environment':environment,'sqlite_object_ordinal':1,'verifier_valid':probe['verifier_valid'],'verifier_codes':codes,'numeric_conversion_difference_observed':probe['numeric_conversion_difference_observed'],'original_bytes_unchanged':probe['original_unchanged']}
  print('::notice title=Baseline verifier diagnosis::'+json.dumps(public,sort_keys=True),flush=True)
+
+ outputs = os.environ.get('GITHUB_OUTPUT')
+ if outputs:
+  with open(outputs, 'a', encoding='utf-8') as stream:
+   stream.write('sqlite=' + environment['sqlite'] + '\n')
+   stream.write('python=' + environment['python'] + '\n')
+   stream.write('verifier_codes=' + (','.join(codes) or 'NONE') + '\n')
+   stream.write('verifier_valid=' + ('true' if probe['verifier_valid'] else 'false') + '\n')
+   stream.write('numeric_difference=' + ('true' if probe['numeric_conversion_difference_observed'] else 'false') + '\n')
