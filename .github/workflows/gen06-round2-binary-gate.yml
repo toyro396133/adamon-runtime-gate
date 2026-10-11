@@ -56,7 +56,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: toyro396133/cognitive-zero
-          ref: 751b4608ada3b560872df37ac8f23c0f728330ea
+          ref: 2551c1de097971037fbad8f4071983f52acabb2c
           token: ${{ secrets.COGNITIVE_ZERO_READ_TOKEN }}
           persist-credentials: false
           path: private-source
@@ -67,7 +67,7 @@ jobs:
         working-directory: private-source
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "751b4608ada3b560872df37ac8f23c0f728330ea"
+          test "$(git rev-parse HEAD)" = "2551c1de097971037fbad8f4071983f52acabb2c"
           test -f .github/audit/gen06_round2_binary_verify.py
           test -f docs/gen0_6_round2_audit_repair/sqlite_access_manifest.json
           test -f docs/gen0_6_round2_T2_measurement_evidence.tar.gz
@@ -76,12 +76,60 @@ jobs:
       - name: Install Python 3.12
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
-          python-version: '3.12'
+          python-version: '3.12.14'
 
       - name: Install published verification dependencies
         shell: bash
         run: |
           python -m pip install --disable-pip-version-check --no-cache-dir -r private-source/requirements-tested.txt
+
+      - name: Diagnose original host runtime without accepting evidence
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python infrastructure/ci/gen06_round2_runtime_probe.py private-source
+
+      - name: Checkout exact public SQLite runtime source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: sqlite/sqlite
+          ref: ccd445d76a9362c63add000354fac84ba9022176
+          persist-credentials: false
+          path: sqlite-runtime-source
+          fetch-depth: 1
+
+      - name: Build the frozen SQLite numerical runtime
+        shell: bash
+        working-directory: sqlite-runtime-source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "ccd445d76a9362c63add000354fac84ba9022176"
+          ./configure --enable-shared --disable-static
+          make -j2 libsqlite3.so
+          mkdir -p "$RUNNER_TEMP/adamon-sqlite-runtime"
+          cp libsqlite3.so "$RUNNER_TEMP/adamon-sqlite-runtime/libsqlite3.so.0"
+          ln -s libsqlite3.so.0 "$RUNNER_TEMP/adamon-sqlite-runtime/libsqlite3.so"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/adamon-sqlite-runtime" >> "$GITHUB_ENV"
+
+      - name: Verify exact frozen runtime and JSON numeric conversion
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PYTHON'
+          import json, platform, sqlite3
+          assert platform.python_version() == '3.12.14'
+          assert sqlite3.sqlite_version == '3.53.1'
+          # Synthetic public fixture, unrelated to any private research row.
+          payload = json.dumps({'v': 397 / 997})
+          with sqlite3.connect(':memory:') as connection:
+              actual = connection.execute("SELECT json_extract(?, '$.v')", (payload,)).fetchone()[0]
+          assert actual.hex() == json.loads(payload)['v'].hex()
+          print('::notice title=Frozen audit runtime::Python=' + platform.python_version() + ' SQLite=' + sqlite3.sqlite_version)
+          PYTHON
+
+      - name: Validate public filtering with synthetic fixtures
+        shell: bash
+        run: python infrastructure/ci/test_gen06_round2_binary_gate.py -v
 
       - name: Run independent immutable evidence checks with private logs
         shell: bash

@@ -8,6 +8,8 @@ which is read only locally and removed at the end of the runner job.
 import json
 import os
 import pathlib
+import platform
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -56,6 +58,7 @@ def main():
                     diagnostic["next_stage"] = "FINAL_ASSERTION"
                 raw_message = str((result.get("failure") or {}).get("message") or "")
                 safe_failures = (
+                    ("Frozen SQLite runtime mismatch", "ENVIRONMENT_SQLITE"),
                     ("SQLite integrity failed", "SQLITE_INTEGRITY_CHECK"),
                     ("SQLite foreign key failure", "SQLITE_FOREIGN_KEYS"),
                     ("Global Verifier failed", "GLOBAL_VERIFIER"),
@@ -69,12 +72,18 @@ def main():
                     "WORLD_VERSION", "CONSOLIDATION_CURSOR", "EVENT_VERSION", "EVENT_PARENT", "PATTERN_COUNTS",
                     "OBSERVER_VERSION", "DIRECT_DEEP_UPDATE", "DEEP_PROVENANCE", "DEEP_CAP_OR_DELTA",
                     "DEEP_EVIDENCE_CUTOFF", "MISSING_CAUSAL_PATTERN", "MISSING_OR_FUTURE_CAUSAL_EVENT",
-                    "INVALID_SCHEMA_OR_STATE", "SQLITE_READ_ERROR"))
+                    "INVALID_SCHEMA_OR_STATE", "SQLITE_READ_ERROR", "PERSON_OBSERVATION", "PERSON_MODEL"))
                 diagnostic["verifier_failure_codes"] = sorted(
                     code for code in allowed_verifier_codes
                     if ("'code': '" + code + "'") in raw_message
                 )
-                import re
+                safe_codes = (result.get("failure_verifier") or {}).get("codes") or []
+                diagnostic["verifier_failure_codes"] = sorted(set(
+                    code for code in safe_codes if isinstance(code, str) and code in allowed_verifier_codes
+                )) or diagnostic["verifier_failure_codes"]
+                ordinal = (result.get("failure_verifier") or {}).get("ordinal")
+                if type(ordinal) is int and 1 <= ordinal <= 23:
+                    diagnostic["sqlite_object_ordinal"] = ordinal
                 completed = re.findall(r"SQLITE SEMANTIC VERIFIED:\s*(\d+)\s*/23",
                                        private_log.read_text(encoding="utf-8", errors="ignore"))
                 diagnostic["sqlite_object_checks_completed"] = int(completed[-1]) if completed else 0
@@ -115,6 +124,7 @@ def main():
             "status": status,
             "diagnostic": diagnostic if status != "BINARY_AUDIT_EVIDENCE_PASS_REVIEWER_ACCEPTANCE_PENDING" else None,
             "run_completed": process.returncode == 0,
+            "environment": {"python": platform.python_version(), "sqlite": sqlite3.sqlite_version},
             "checks_completed": passed,
             "independent_review_acceptance": "NOT_SELF_DECLARED",
             "gen06_verified": False,
@@ -134,6 +144,7 @@ def main():
                 if passed:
                     for key, number in sorted(passed.items()):
                         stream.write("- " + key.replace("_", " ") + ": " + str(number) + "\n")
+        print("::notice title=ADAMON binary gate::" + json.dumps(public, sort_keys=True), flush=True)
         print("ADAMON_G06_BINARY_GATE:", status, flush=True)
         if status != "BINARY_AUDIT_EVIDENCE_PASS_REVIEWER_ACCEPTANCE_PENDING":
             print("SANITIZED_DIAGNOSTIC:", json.dumps(diagnostic, sort_keys=True), flush=True)
