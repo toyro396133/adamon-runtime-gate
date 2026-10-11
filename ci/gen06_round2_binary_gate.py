@@ -33,10 +33,30 @@ def main():
             )
         status = "INCOMPLETE"
         passed = {}
+        diagnostic = {"last_completed_stage": "NONE", "next_stage": "FROZEN_SOURCE"}
         if result_file.is_file():
             try:
                 result = json.loads(result_file.read_text(encoding="utf-8"))
                 checks = result.get("checks") or {}
+                stages = (
+                    ("frozen_sources", "FROZEN_SOURCE"),
+                    ("archives", "ARCHIVES"),
+                    ("sqlite_objects", "SQLITE_RECONSTRUCTION"),
+                    ("sqlite_integrity", "SQLITE_INTEGRITY"),
+                    ("ll3_d10", "LL3_D10"),
+                    ("d6_d7", "D6_D7"),
+                    ("restart_revision", "RESTART_REVISION"),
+                )
+                for index, (key, name) in enumerate(stages):
+                    if key not in checks:
+                        diagnostic["next_stage"] = name
+                        break
+                    diagnostic["last_completed_stage"] = name
+                else:
+                    diagnostic["next_stage"] = "FINAL_ASSERTION"
+                kind = (result.get("failure") or {}).get("type")
+                if kind in ("AssertionError", "KeyError", "TypeError", "ValueError", "OSError", "ImportError", "ModuleNotFoundError", "IndexError", "OperationalError", "DatabaseError", "AttributeError"):
+                    diagnostic["error_kind"] = kind
                 if process.returncode == 0 and result.get("status") == "PASS_INDEPENDENT_BINARY_AND_SEMANTIC_EVIDENCE_CHECKS":
                     source_check = checks["frozen_sources"]
                     archives = checks["archives"]
@@ -69,6 +89,7 @@ def main():
                 pass
         public = {
             "status": status,
+            "diagnostic": diagnostic if status != "BINARY_AUDIT_EVIDENCE_PASS_REVIEWER_ACCEPTANCE_PENDING" else None,
             "run_completed": process.returncode == 0,
             "checks_completed": passed,
             "independent_review_acceptance": "NOT_SELF_DECLARED",
@@ -90,6 +111,8 @@ def main():
                     for key, number in sorted(passed.items()):
                         stream.write("- " + key.replace("_", " ") + ": " + str(number) + "\n")
         print("ADAMON_G06_BINARY_GATE:", status, flush=True)
+        if status != "BINARY_AUDIT_EVIDENCE_PASS_REVIEWER_ACCEPTANCE_PENDING":
+            print("SANITIZED_DIAGNOSTIC:", json.dumps(diagnostic, sort_keys=True), flush=True)
         if status != "BINARY_AUDIT_EVIDENCE_PASS_REVIEWER_ACCEPTANCE_PENDING":
             print("Audit did not complete. Raw private logs were suppressed; investigate only through a private trusted review channel.", flush=True)
             raise SystemExit(1)
