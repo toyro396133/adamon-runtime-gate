@@ -64,6 +64,15 @@ def main():
                 diagnostic["error_category"] = next((code for prefix, code in safe_failures
                                                      if raw_message.startswith(prefix)), "UNCLASSIFIED")
                 import re
+                allowed_verifier_codes = frozenset(("SQLITE_INTEGRITY", "FOREIGN_KEYS", "MISSING_HISTORY_PROTECTION",
+                    "LAYER_SET", "LAYER_CONFIGURATION", "LAYER_DIMENSIONS", "SELF_BOUNDS", "WORKING_BOUNDS",
+                    "WORLD_VERSION", "CONSOLIDATION_CURSOR", "EVENT_VERSION", "EVENT_PARENT", "PATTERN_COUNTS",
+                    "OBSERVER_VERSION", "DIRECT_DEEP_UPDATE", "DEEP_PROVENANCE", "DEEP_CAP_OR_DELTA",
+                    "DEEP_EVIDENCE_CUTOFF", "MISSING_CAUSAL_PATTERN", "MISSING_OR_FUTURE_CAUSAL_EVENT",
+                    "INVALID_SCHEMA_OR_STATE", "SQLITE_READ_ERROR"))
+                error_codes = re.findall(r"['\\\"]code['\\\"]:\\s*['\\\"]([A-Z0-9_]+)['\\\"]", raw_message)
+                diagnostic["verifier_failure_codes"] = sorted(set(error_codes) & allowed_verifier_codes)
+                import re
                 completed = re.findall(r"SQLITE SEMANTIC VERIFIED:\s*(\d+)\s*/23",
                                        private_log.read_text(encoding="utf-8", errors="ignore"))
                 diagnostic["sqlite_object_checks_completed"] = int(completed[-1]) if completed else 0
