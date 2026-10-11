@@ -53,3 +53,20 @@ with the synthetic REST/state tests.
 suite skipped there); native C compiles with all warnings treated as errors.
 The canonical permit binding test explicitly rejects boolean `True` where the
 owner signed integer Job ID `1`, avoiding Python's bool/int equality trap.
+
+## 2026-10-11 — Nonresearch hardening (post-delivery)
+
+Supervisor now independently enforces the Listener/Worker operation allowlist, in
+addition to the private bridge's validation. A synthetic regression verifies that
+a Listener cannot acknowledge, authorize or execute Worker operations.
+
+`watchdog.py` adds an inert, supervisor-injected fail-closed heartbeat policy for
+Worker/launcher/process exit, assignment loss, permit revocation, timeout and
+cancellation. On failure it attempts credential revocation, cgroup termination and
+partial evidence preservation independently, even if another cleanup operation
+raises. Six standalone synthetic unit tests were executed locally and passed.
+The tested source/test Git blobs match the files on this branch.
+
+This is **not** a connected host watchdog. No live GitHub assignment source,
+privileged pidfd/cgroup driver, deployment supervisor process, runner binary or
+microVM is attached. It must not satisfy IMP-002/IMP-005 or authorize T3.
