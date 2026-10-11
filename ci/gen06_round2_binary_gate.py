@@ -70,8 +70,10 @@ def main():
                     "OBSERVER_VERSION", "DIRECT_DEEP_UPDATE", "DEEP_PROVENANCE", "DEEP_CAP_OR_DELTA",
                     "DEEP_EVIDENCE_CUTOFF", "MISSING_CAUSAL_PATTERN", "MISSING_OR_FUTURE_CAUSAL_EVENT",
                     "INVALID_SCHEMA_OR_STATE", "SQLITE_READ_ERROR"))
-                error_codes = re.findall(r"['\\\"]code['\\\"]:\\s*['\\\"]([A-Z0-9_]+)['\\\"]", raw_message)
-                diagnostic["verifier_failure_codes"] = sorted(set(error_codes) & allowed_verifier_codes)
+                diagnostic["verifier_failure_codes"] = sorted(
+                    code for code in allowed_verifier_codes
+                    if ("'code': '" + code + "'") in raw_message
+                )
                 import re
                 completed = re.findall(r"SQLITE SEMANTIC VERIFIED:\s*(\d+)\s*/23",
                                        private_log.read_text(encoding="utf-8", errors="ignore"))
@@ -125,7 +127,7 @@ def main():
         if summary:
             with open(summary, "a", encoding="utf-8") as stream:
                 stream.write("## ADAMON Gen0.6 independent binary evidence gate\n\n")
-                stream.write("- Audit outcome: \`" + status + "\`\n")
+                stream.write("- Audit outcome: " + status + "\n")
                 stream.write("- Private source and evidence: never uploaded\n")
                 stream.write("- Independent reviewer acceptance: pending\n")
                 stream.write("- Gen0.6 verified: no; T3 authorized: no\n")
