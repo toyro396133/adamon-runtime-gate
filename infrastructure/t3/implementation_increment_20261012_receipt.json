@@ -1,0 +1,23 @@
+{
+  "status": "IMPLEMENTATION_PARTIAL",
+  "source_code_head_tested": "8f593156d8d02868380ff7d9218cc735caa67df7",
+  "pytest_combined_final": {
+    "passed": 291,
+    "subtests": 17,
+    "failures": 0,
+    "skips": 0,
+    "scope": "mixed unit/synthetic/local OS checks across both implementation repos; no scientific execution"
+  },
+  "micro_authority_scope": "privileged generic receipt bindings; private authority bytes remain private",
+  "validation_kinds": [
+    "UNIT_TESTED",
+    "SYNTHETIC_INTEGRATION_TESTED",
+    "LOCAL_OS_TESTED"
+  ],
+  "live_runtime": "LIVE_RUNTIME_UNVERIFIED",
+  "research_executed": false,
+  "execution_authority_frozen": false,
+  "terminal_pass_enabled": false,
+  "full_runner_build": "RUNNER_FULL_BUILD_UNVERIFIED",
+  "draft_state_changed": false
+}
