@@ -26,6 +26,28 @@ class CorrelationTests(unittest.TestCase):
     def test_wrong_workflow_sha(self):
         s,a=self.fixture();a['workflow_sha']='c'*40
         with self.assertRaises(Denied):s.correlate(a)
+    def test_listener_private_endpoint_cannot_issue_worker_commands(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        import threading
+        s=object.__new__(Supervisor)
+        s.listener=Mock()
+        s.dispatch=SimpleNamespace(revoked=False,acknowledged=False,
+                                   raw='fixed-raw',sha256='a'*64,
+                                   worker=Mock(),assignment=dict(step_id='step',marker='ADAMON_P4_FIXED_LAUNCH_V4'))
+        s.lock=threading.RLock()
+        s._private_context=threading.local()
+        s._private_context.role='LISTENER'
+        s.request_ids=set()
+        for index,operation in enumerate(('worker_ack','authorize_assignment','fixed_step_execute')):
+            with self.subTest(operation=operation), self.assertRaises(Denied):
+                s.handle_private_message('LISTENER',
+                    {'request_id':str(index),'operation':operation,
+                     'payload':{'assignment_sha256':'a'*64,'raw_assignment':'fixed-raw',
+                                'step_id':'step'}},[])
+        self.assertFalse(s.dispatch.acknowledged)
+        self.assertFalse(getattr(s.dispatch,'authorized',False))
+
     def test_direct_public_message_cannot_enroll(self):
         s,a=self.fixture()
         import threading
