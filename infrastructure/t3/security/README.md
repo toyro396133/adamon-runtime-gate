@@ -70,3 +70,27 @@ The tested source/test Git blobs match the files on this branch.
 This is **not** a connected host watchdog. No live GitHub assignment source,
 privileged pidfd/cgroup driver, deployment supervisor process, runner binary or
 microVM is attached. It must not satisfy IMP-002/IMP-005 or authorize T3.
+
+## 2026-10-11 — Trusted GitHub REST identity adapter
+
+`github_rest.py` now provides an owner-injected, fixed-route
+`GitHubApi.get_run/get_jobs` adapter matching the Supervisor's closed
+correlation interface. It fetches the exact GitHub Actions run attempt,
+attempt-scoped jobs, and the workflow **blob SHA** from the immutable
+head commit. It distinguishes the numeric REST Job ID from the
+Runner's private GUID and rejects non-dispatch runs, invalid attempts,
+missing/ambiguous records, unsigned caller data and unknown routes.
+
+`OwnerAuthenticatedTransport` restricts endpoints to GitHub API fixed
+routes, verifies HTTPS, disables proxy inherited from the environment,
+disallows redirects so bearer credentials cannot be forwarded to another
+host, bounds response bodies and forbids caller-provided URLs.
+Credentials must come from an owner-controlled token provider,
+**never** a workflow variable.
+
+Seven nonresearch mock-transport unit tests passed locally, and exact
+Git blob IDs of the published implementation and tests matched the locally
+executed files. These tests are not authenticated GitHub Job preflight:
+no live owner token, signed deployment, real-run correlation, worker pidfd
+or execution freeze has been proven. The adapter is injected into a future
+privileged Supervisor; no public HTTP enrollment or workflow is installed.
