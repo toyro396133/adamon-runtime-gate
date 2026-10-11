@@ -42,6 +42,28 @@ def _read(conn):
     if not 0<n<=MAX_FRAME:raise Denied('session frame limit')
     return decode(exact(n))
 
+def assignment_binding(assignment, raw_sha256):
+    """One closed full-tuple projection shared by session and local canary.
+
+    Input is the Supervisor's retained normalized assignment, never request JSON.
+    The raw snapshot digest additionally binds all pinned Worker step fields.
+    """
+    a=assignment
+    workflow_ref=a.get('workflow_ref');repository=a.get('repository');ref=a.get('ref')
+    if type(repository) is not str or type(ref) is not str or type(workflow_ref) is not str:
+        raise Denied('complete workflow assignment required')
+    prefix=repository+'/';suffix='@'+ref
+    if not workflow_ref.startswith(prefix) or not workflow_ref.endswith(suffix):
+        raise Denied('workflow/repository/ref identity mismatch')
+    expected=dict(job_id=a.get('job_id'),run_id=a.get('run_id'),run_attempt=a.get('run_attempt'),
+        repository_id=a.get('repository_id'),workflow_path=workflow_ref[len(prefix):-len(suffix)],
+        workflow_sha=a.get('workflow_sha'),ref=ref,commit_sha=a.get('head_sha'),
+        step_sha256=a.get('step_sha256'),worker_job_guid=a.get('job_guid'),
+        worker_request_id=a.get('request_id'),plan_guid=a.get('plan_guid'),assignment_sha256=raw_sha256)
+    if any(v is None for v in expected.values()):raise Denied('incomplete assignment identity tuple')
+    return expected
+
+
 @dataclass
 class AuthenticatedSession:
     connection: object
@@ -76,27 +98,10 @@ class SessionController:
             if dispatch is None or dispatch.revoked or not dispatch.acknowledged or not dispatch.authorized:
                 raise Denied('verified active assignment required')
             self.supervisor.correlate(dispatch.assignment)
-            a=dispatch.assignment
-            workflow_ref=a.get('workflow_ref')
-            repository=a.get('repository')
-            ref=a.get('ref')
-            if type(repository) is not str or type(ref) is not str or type(workflow_ref) is not str:
-                raise Denied('complete workflow assignment required')
-            prefix=repository+'/'
-            suffix='@'+ref
-            if not workflow_ref.startswith(prefix) or not workflow_ref.endswith(suffix):
-                raise Denied('workflow/repository/ref identity mismatch')
-            workflow_path=workflow_ref[len(prefix):-len(suffix)]
-            expected=dict(job_id=a.get('job_id'),run_id=a.get('run_id'),run_attempt=a.get('run_attempt'),
-                          repository_id=a.get('repository_id'),workflow_path=workflow_path,
-                          workflow_sha=a.get('workflow_sha'),ref=ref,commit_sha=a.get('head_sha'),
-                          step_sha256=a.get('step_sha256'),worker_job_guid=a.get('job_guid'),
-                          worker_request_id=a.get('request_id'),plan_guid=a.get('plan_guid'))
+            expected=assignment_binding(dispatch.assignment,dispatch.sha256)
             for key,value in expected.items():
-                if value is None or key not in self.binding or canonical(self.binding[key])!=canonical(value):
+                if key not in self.binding or canonical(self.binding[key])!=canonical(value):
                     raise Denied('permit/assignment identity mismatch: '+key)
-            if self.binding.get('assignment_sha256')!=dispatch.sha256:
-                raise Denied('permit/raw assignment mismatch')
             conn,key,exporter=accept(self.context,raw_socket,self.launcher,self.ca,self.oid,canonical(self.binding),self.spki)
             raw_socket.setblocking(False)
             challenge=self.challenges.issue(session,exporter,digest(self.request))

@@ -14,6 +14,7 @@ class CampaignRegistry:
     micro_bindings: dict
     gate_assertions: dict
     control_assertions: dict
+    micro_authorities: dict = None
     def validate(self):
         if (len(self.life),len(self.gates),len(self.micro))!=(27,23,2):raise ReceiptError('registry cardinality')
         for group in (self.life,self.micro,self.gates,self.controls):
@@ -69,10 +70,18 @@ class Aggregator:
             permits.add(p['permit_id']);accepted[identity]=p
             if identity[0]=='LIFE' and p['completed_cycles']!=self.registry.cycle_counts[identity[1]]:raise ReceiptError('life count mismatch')
             if identity[1] in self.registry.micro:
-                if any(p.get(k)!=v for k,v in self.registry.micro_bindings[identity[1]].items()):raise ReceiptError('micro fixture/count mismatch')
+                if any(type(p.get(k)) is not type(v) or p.get(k)!=v for k,v in self.registry.micro_bindings[identity[1]].items()):raise ReceiptError('micro fixture/count mismatch')
+                from .micro_authority import MicroAuthorityPins
+                pins=(self.registry.micro_authorities or {}).get(identity[1])
+                if not isinstance(pins,MicroAuthorityPins):raise ReceiptError('active privileged MICRO authority missing')
+                pins.verify_receipt(p)
             if identity[0]=='AUDIT':
                 m=self._manifest(p['audit_manifest'])
-                if set(m)!={'producer_receipt_sha256','gates','controls','failures','errors','skips'} or any(type(m[k]) is not int or m[k]!=0 for k in ('failures','errors','skips')):raise ReceiptError('audit coverage/failure')
+                expected_fields={'producer_receipt_sha256','gates','controls','failures','errors','skips'}
+                if identity[1] in self.registry.micro:
+                    expected_fields.add('micro_authority')
+                    pins.verify_metadata(m.get('micro_authority'))
+                if set(m)!=expected_fields or any(type(m[k]) is not int or m[k]!=0 for k in ('failures','errors','skips')):raise ReceiptError('audit coverage/failure')
                 if type(m['gates']) is not dict or type(m['controls']) is not dict:raise ReceiptError('closed gate/control maps required')
                 producer_role='LIFE' if identity[1] in self.registry.life else 'MICRO'
                 m['_producer_identity']=(producer_role,identity[1]);p=dict(p,_manifest=m);accepted[identity]=p

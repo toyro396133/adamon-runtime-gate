@@ -24,7 +24,7 @@ def create_inventory(members: dict[str, SealedEvidence], *, state, signer, key_i
 
 
 def verify_inventory(inventory, *, public_key, key_id, required_labels, trusted_member_key, trusted_member_key_id, require_complete=True):
-    if set(inventory) != {'version','state','members','signer_key_id','signature'} or inventory['version'] != 1 or inventory['signer_key_id'] != key_id:
+    if type(inventory) is not dict or set(inventory) != {'version','state','members','signer_key_id','signature'} or type(inventory['version']) is not int or inventory['version'] != 1 or inventory['signer_key_id'] != key_id:
         raise StorageFailure('unknown inventory schema or identity')
     payload = {key:value for key,value in inventory.items() if key!='signature'}
     try:
@@ -34,12 +34,14 @@ def verify_inventory(inventory, *, public_key, key_id, required_labels, trusted_
     if inventory['state'] not in ('SEALED_COMPLETE','SEALED_PARTIAL','CRASH_INCOMPLETE') or (require_complete and inventory['state'] != 'SEALED_COMPLETE'):
         raise StorageFailure('unqualified inventory state')
     from .evidence import EvidenceRef
+    if type(inventory['members']) is not list or not inventory['members'] or len(inventory['members'])>10000:
+        raise StorageFailure('invalid inventory member collection')
     found = {}
     for entry in inventory['members']:
-        if set(entry) != {'label','evidence'} or not LABEL.fullmatch(entry['label']) or entry['label'] in found:
+        if type(entry) is not dict or set(entry) != {'label','evidence'} or not LABEL.fullmatch(entry['label']) or entry['label'] in found:
             raise StorageFailure('duplicate or invalid inventory member')
         data = entry['evidence']
-        if set(data) != {'version','reference','state','retention_until','signer_key_id','signature','storage_scope_sha256'} or data['version'] != 1:
+        if type(data) is not dict or set(data) != {'version','reference','state','retention_until','signer_key_id','signature','storage_scope_sha256'} or type(data['version']) is not int or data['version'] != 1:
             raise StorageFailure('unknown evidence member schema')
         try:
             envelope = SealedEvidence(EvidenceRef(**data['reference']),data['state'],data['retention_until'],data['signer_key_id'],data['signature'],data['storage_scope_sha256'])

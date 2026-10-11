@@ -61,3 +61,21 @@ No research entry point was enabled.
 שש בדיקות `integration_tests/test_runtime_guest_process.py` מפעילות תהליך Guest אמיתי דרך AF_UNIX, handshake, הזרקה חתומה ומאומתת, קבלת completion חתומה, סירוב replay/Job/מפתח שגויים, FD אטום ו־SIGKILL אמיתי דרך pidfd. הן אינן מריצות Firecracker או מוכיחות בידוד KVM או cgroup.
 
 **חסם חיבור מפורש:** שלב birth של VMM חייב להסתיים לפני הנפקת credential והתקנת native launcher mutation guard, שאוסר clone/exec. פונקציית native spawn אינה מתקינה guard בעצמה. LocalLauncher.prepare מממש סדר birth ואז guard ואז קבלת FD אטום בערוץ מקומי של המנפיק; אין לשלב Popen אחרי guard. ה־executable של Launcher ותהליך ה־broker המנפיק טרם הופעלו כשרשרת שלמה על KVM, ואין להציג חיבור זה כמוכח. חסרים executable/image של Launcher, Firecracker, kernel/rootfs חתומים, mounts מוצפנים, תהליך watchdog ב־UID/cgroup נפרדים והקצאת GitHub Job אמיתית. אין אישור ביצוע מחקר; הכניסה המחקרית חסומה. אין שימוש בתשתית בתשלום, workflow או T3/T4.
+
+## חיבור אנכי מקומי שאינו מחקר
+
+`vertical.py` מוסיף `NonresearchVerticalController` עם Subject יחיד וקבוע
+`NONRESEARCH_SOCKET_CANARY`. הוא דורש Assignment שכבר אומת ואושר ב־Supervisor,
+מבצע התאמה חוזרת ל־REST, צורך Permit חתום אטומית, יוצר תהליך Python נקי עם
+`spawn` (ללא ירושת מפתחות הבעלים דרך fork), מאמת את הילד לפי pidfd ו־SO_PEERCRED,
+ומעביר מפתח השלמה דרך sealed memfd ו־SCM_RIGHTS. Guest injection והשלמה נחתמים
+ונבדקים באמצעות הרכיבים הקיימים. ביטול, תקלה ב־bootstrap או אובדן זהות ה־Job
+הורגים את הילד בבעלות הבקר ומשמרים קבלת PARTIAL חתומה. אין API לפקודה, מודול,
+נתיב קוד או מתאם שנבחרו בידי ה־Workflow.
+
+בדיקות `test_vertical_nonresearch.py` מחברות את שרשרת הרכיבים ותהליכים בפועל.
+REST ו־Assignment הם נתונים סינתטיים המסומנים כך; הדוגמאות אינן Permit מחקרי.
+הן אינן מוכיחות Runner מלא, Job GitHub חי, enroll דרך mTLS, privilege separation,
+בידוד namespace/cgroup או microVM/KVM. בקרת קריסת Supervisor מפעילה Watchdog
+אמיתי על pidfds של תהליכים מקומיים; הכתיבה המדמה cgroup.kill מסומנת במפורש.
+החסימה `NO_APPROVED_EXECUTION_FREEZE` נשארת ללא שינוי.
