@@ -122,14 +122,26 @@ class GuestClient:
         for item in artifacts:
             if type(item) is not dict or set(item)!={'object_id','version_id','sha256','size_bytes'}:
                 raise Blocked('GUEST_ARTIFACT_SCHEMA')
-            if type(item['object_id']) is not str or item['object_id'] in ids or not item['object_id'] or '/' in item['object_id']:
+            object_id=item['object_id']
+            # Match the frozen opaque evidence-ref contract, not a guest-selected
+            # path or an unverified free-form object name.
+            if (type(object_id) is not str or len(object_id)!=64 or
+                any(c not in '0123456789abcdef' for c in object_id) or object_id in ids):
                 raise Blocked('GUEST_ARTIFACT_ID')
-            ids.add(item['object_id'])
-            if type(item['version_id']) is not str or not item['version_id'] or item['version_id'] in {'null','latest'}:
+            ids.add(object_id)
+            version=item['version_id']
+            if (type(version) is not str or not 1<=len(version)<=256 or
+                version in {'null','latest'} or
+                any(c not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+=./-' for c in version)):
                 raise Blocked('GUEST_ARTIFACT_VERSION')
-            if type(item['size_bytes']) is not int or item['size_bytes']<0 or type(item['sha256']) is not str or len(item['sha256'])!=64 or any(c not in '0123456789abcdef' for c in item['sha256']):
+            if (type(item['size_bytes']) is not int or not 0<item['size_bytes']<=2**53-1 or
+                type(item['sha256']) is not str or len(item['sha256'])!=64 or
+                any(c not in '0123456789abcdef' for c in item['sha256'])):
                 raise Blocked('GUEST_ARTIFACT_DIGEST')
-        try: self.key.verify(bytes.fromhex(envelope['signature_hex']),DOMAIN+canonical(payload))
+        signature=envelope['signature_hex']
+        if type(signature) is not str or len(signature)!=128 or any(c not in '0123456789abcdef' for c in signature):
+            raise Blocked('GUEST_COMPLETION_SIGNATURE')
+        try: self.key.verify(bytes.fromhex(signature),DOMAIN+canonical(payload))
         except Exception: raise Blocked('GUEST_COMPLETION_SIGNATURE')
         return payload
 
