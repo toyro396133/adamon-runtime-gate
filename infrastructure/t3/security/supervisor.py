@@ -70,6 +70,12 @@ class Supervisor:
             self.request_ids.add(request_id)
             op=message['operation']; p=message['payload']
             (self.listener if role=='LISTENER' else self._worker()).verify()
+            # Defense in depth: the bridge rejects role confusion too, but the
+            # privileged state machine must never trust that it was its caller.
+            if ((op=='listener_snapshot_spawn' and role!='LISTENER') or
+                (op in {'worker_ack','authorize_assignment','fixed_step_execute'}
+                 and role!='WORKER')):
+                raise Denied('private endpoint operation/role mismatch')
             if op=='revoke':
                 self.revoke(p['reason']); return 0
             if op=='listener_snapshot_spawn':
