@@ -32,7 +32,7 @@ def configured(tmp_path, setup):
 def artifact():
     c=sqlite3.connect(':memory:')
     try:
-        c.execute('CREATE TABLE canary(value TEXT)');c.execute('INSERT INTO canary VALUES(?)',('nonresearch',));c.commit()
+        c.execute('CREATE TABLE canary(value TEXT)');c.execute('INSERT INTO canary VALUES(?)',('owner-substitute',));c.commit()
         return c.serialize()
     finally:c.close()
 
@@ -121,11 +121,14 @@ def test_reordered_or_duplicate_signed_chain_rejected_with_owner_anchor(tmp_path
         open_nonresearch_audit(altered,store=store,producer=producer,chain_key=chain.signer.public_key(),chain_key_id='chain',**broker.trusted_audit_anchor())
 
 
-def test_owner_cannot_substitute_artifact_after_guest_completion(tmp_path,setup):
+@pytest.mark.parametrize('valid_alternate_sqlite',[False,True])
+def test_owner_cannot_substitute_artifact_after_guest_completion(tmp_path,setup,valid_alternate_sqlite):
     store,producer,chain,broker=configured(tmp_path,setup);broker.start()
     result=setup['controller']().run()
+    replacement=artifact() if valid_alternate_sqlite else result['artifact_bytes']+b'changed'
+    assert replacement!=result['artifact_bytes']
     with pytest.raises(StorageFailure,match='byte binding'):
-        broker.preserve(result['receipt'],result['artifact_bytes']+b'changed')
+        broker.preserve(result['receipt'],replacement)
     assert len(chain.read())==1 and not broker.finished
 
 
