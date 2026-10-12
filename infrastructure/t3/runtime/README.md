@@ -79,3 +79,18 @@ REST ו־Assignment הם נתונים סינתטיים המסומנים כך; ה
 בידוד namespace/cgroup או microVM/KVM. בקרת קריסת Supervisor מפעילה Watchdog
 אמיתי על pidfds של תהליכים מקומיים; הכתיבה המדמה cgroup.kill מסומנת במפורש.
 החסימה `NO_APPROVED_EXECUTION_FREEZE` נשארת ללא שינוי.
+
+## 2026-10-12 — Guest-produced nonresearch evidence
+
+The fixed local canary Guest now produces its own in-memory SQLite bytes. Its
+Ed25519 completion pins their exact digest and size; a bounded, fixed export
+operation transports those bytes before cleanup. The host verifies the signed
+reference, live assignment and permit lease again, then signs a version-2
+NONRESEARCH receipt with the same artifact digest/size. Broker and read-only
+Audit both reject substituted bytes. Version-1 COMPLETE receipts cannot qualify
+this updated canary handoff. Partial originals remain preserved separately and
+cannot qualify complete Audit. This changes no research RPC or frozen receipt.
+
+Tests use a real local Guest child, pidfd cleanup and encrypted SQLite readback;
+REST identity remains synthetic. Export corruption is explicitly a host-side
+transport fault injection. No GitHub/KVM/S3 live claim follows from these tests.

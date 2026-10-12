@@ -42,8 +42,8 @@ class NonresearchEvidenceBroker:
         if type(original_artifact) is not bytes or not original_artifact:
             raise StorageFailure('missing original artifact; cannot regenerate')
         payload = verify(receipt, {'nonresearch-receipt': self.key}, self.domain)
-        expected = {'version', 'scope', 'status', 'phase', 'reason', 'permit_id', 'binding_sha256'}
-        if (set(payload) != expected or type(payload['version']) is not int or payload['version'] != 1
+        expected = {'version', 'scope', 'status', 'phase', 'reason', 'permit_id', 'binding_sha256', 'artifact_sha256', 'artifact_size'}
+        if (set(payload) != expected or type(payload['version']) is not int or payload['version'] != 2
             or payload['scope'] != 'NONRESEARCH_LOCAL_PROCESS_CANARY'
             or payload['status'] not in {'COMPLETE', 'PARTIAL'}
             or payload['permit_id'] != self.permit_id or payload['binding_sha256'] != digest(self.binding)):
@@ -51,6 +51,9 @@ class NonresearchEvidenceBroker:
         state = 'SEALED_COMPLETE' if payload['status'] == 'COMPLETE' else 'SEALED_PARTIAL'
         if state == 'SEALED_COMPLETE' and payload['phase'] != 'COMPLETE':
             raise StorageFailure('incomplete phase cannot seal complete')
+        if state == 'SEALED_COMPLETE' and (payload['artifact_sha256'] != sha(original_artifact)
+            or type(payload['artifact_size']) is not int or payload['artifact_size'] != len(original_artifact)):
+            raise StorageFailure('signed guest artifact byte binding mismatch')
         # Verify and pin retained head before any sealing; append compares again
         # under BEGIN IMMEDIATE to close competing terminal-record races.
         entries = self.chain.read()
@@ -111,4 +114,8 @@ def open_nonresearch_audit(handoff, *, store, producer, chain_key, chain_key_id,
         or completion.get('phase')!='COMPLETE' or completion.get('binding_sha256')!=expected_binding_sha256
         or completion.get('permit_id')!=expected_permit_id):
         raise StorageFailure('completion Job/role/subject/source/fixture/permit mismatch')
+    original=reader.read_member('original_artifact')
+    if (completion.get('version')!=2 or completion.get('artifact_sha256')!=sha(original)
+        or type(completion.get('artifact_size')) is not int or completion['artifact_size']!=len(original)):
+        raise StorageFailure('retained artifact byte binding mismatch')
     return reader

@@ -78,3 +78,18 @@ registries. It requires each closed reference and rejects missing/version-foreig
 or aliased evidence. Its only scope is
 `BYTE_VERIFIED_NOT_SEMANTIC_CONTROL_COMPLETION`; `can_close_gate` is always false.
 It does not execute a control, invent completion or create an acceptance receipt.
+
+## 2026-10-12 — Guest-produced nonresearch evidence
+
+The fixed local canary Guest now produces its own in-memory SQLite bytes. Its
+Ed25519 completion pins their exact digest and size; a bounded, fixed export
+operation transports those bytes before cleanup. The host verifies the signed
+reference, live assignment and permit lease again, then signs a version-2
+NONRESEARCH receipt with the same artifact digest/size. Broker and read-only
+Audit both reject substituted bytes. Version-1 COMPLETE receipts cannot qualify
+this updated canary handoff. Partial originals remain preserved separately and
+cannot qualify complete Audit. This changes no research RPC or frozen receipt.
+
+Tests use a real local Guest child, pidfd cleanup and encrypted SQLite readback;
+REST identity remains synthetic. Export corruption is explicitly a host-side
+transport fault injection. No GitHub/KVM/S3 live claim follows from these tests.

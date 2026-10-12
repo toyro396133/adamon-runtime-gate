@@ -13,6 +13,7 @@ import os
 import select
 import signal
 import socket
+import sqlite3
 import tempfile
 import time
 import uuid
@@ -63,14 +64,25 @@ def _guest(path, binding, owner_public, close_fd):
         if os.fstat(fds[0]).st_size!=32 or fcntl.fcntl(fds[0],1034)&15!=15:raise Denied('canary key not sealed')
         key=Ed25519PrivateKey.from_private_bytes(os.pread(fds[0],32,0))
         os.close(fds.pop())
+        artifact=None
         def adapter(source,fixture):
-            payload=source+b':'+fixture
+            nonlocal artifact
+            database=sqlite3.connect(':memory:')
+            try:
+                database.execute('CREATE TABLE canary(value TEXT)')
+                database.execute('INSERT INTO canary VALUES(?)',('nonresearch',))
+                database.commit();artifact=database.serialize()
+            finally:database.close()
+            payload=artifact
             return [dict(object_id=hashlib.sha256(b'canary-object').hexdigest(),version_id='nonresearch-v1',
                 sha256=hashlib.sha256(payload).hexdigest(),size_bytes=len(payload))]
         VerifiedGuestDispatch(binding,owner_public,key,SOURCE,FIXTURE,
             {('LIFE',SUBJECT):adapter}).serve(stream)
         # Keep owned process live until parent verifies signed completion and
         # requests successful cleanup. EOF/crash cannot masquerade as success.
+        if receive(stream)!={'version':4,'operation':'nonresearch-export'} or artifact is None:
+            raise Denied('canary export protocol')
+        send(stream,{'version':4,'artifact_hex':artifact.hex()})
         if receive(stream)!={'version':4,'operation':'nonresearch-cleanup'}:raise Denied('canary cleanup protocol')
     finally:
         for fd in fds:os.close(fd)
@@ -83,7 +95,7 @@ class NonresearchVerticalController:
         self.supervisor=supervisor;self.ledger=ledger;self.permit_id=permit_id
         self.binding=dict(binding);self.owner=owner_key;self.receipt_key=receipt_key
         self.preserve_partial=preserve_partial;self.used=False
-        self.record=None;self.child=None;self.phase='CONSTRUCTED'
+        self.record=None;self.child=None;self.phase='CONSTRUCTED';self.artifact=None
         if self.binding.get('subject')!=SUBJECT or self.binding.get('role')!='LIFE':
             raise Denied('nonresearch closed subject')
         if not callable(preserve_partial):raise Denied('retained partial sink required')
@@ -100,7 +112,8 @@ class NonresearchVerticalController:
         return d
 
     def _receipt(self,status,reason):
-        payload=dict(version=1,scope='NONRESEARCH_LOCAL_PROCESS_CANARY',status=status,
+        payload=dict(version=2,artifact_sha256=None if self.artifact is None else hashlib.sha256(self.artifact).hexdigest(),
+            artifact_size=None if self.artifact is None else len(self.artifact),scope='NONRESEARCH_LOCAL_PROCESS_CANARY',status=status,
             phase=self.phase,reason=reason,permit_id=self.permit_id,binding_sha256=digest(self.binding))
         return sign(payload,self.receipt_key,'nonresearch-receipt',RECEIPT_DOMAIN)
 
@@ -148,11 +161,25 @@ class NonresearchVerticalController:
                     if not self.ledger.session_live(self.permit_id,session):raise Denied('permit lease lost')
                     result=client.poll_completion(.02)
                 self._live()
+                send(stream,{'version':4,'operation':'nonresearch-export'})
+                stream.settimeout(max(.001,deadline-time.monotonic()))
+                exported=receive(stream)
+                if cancelled() or time.monotonic()>=deadline:raise Denied('nonresearch export cancelled/deadline')
+                self._live();self.record.verify()
+                if not self.ledger.session_live(self.permit_id,session):raise Denied('permit lease lost')
+                if type(exported) is not dict or set(exported)!={'version','artifact_hex'} or exported['version']!=4:
+                    raise Denied('canary export schema')
+                try:artifact=bytes.fromhex(exported['artifact_hex'])
+                except (ValueError,TypeError):raise Denied('canary artifact encoding')
+                refs=result['artifacts']
+                if len(refs)!=1 or refs[0]['sha256']!=hashlib.sha256(artifact).hexdigest() or refs[0]['size_bytes']!=len(artifact):
+                    raise Denied('canary signed artifact mismatch')
+                self.artifact=artifact
                 send(stream,{'version':4,'operation':'nonresearch-cleanup'})
                 self.child.join(2)
                 if self.child.exitcode!=0:raise Denied('nonresearch guest cleanup failed')
                 self.phase='COMPLETE';self.ledger.end_session(self.permit_id,session,'NONRESEARCH_COMPLETE')
-                return dict(completion=result,receipt=self._receipt('COMPLETE','owned guest exited'))
+                return dict(completion=result,artifact_bytes=self.artifact,receipt=self._receipt('COMPLETE','owned guest exited'))
         except BaseException as failure:
             errors=[]
             if self.record is not None:
