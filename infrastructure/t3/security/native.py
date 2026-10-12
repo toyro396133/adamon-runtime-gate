@@ -1,6 +1,7 @@
 """Bindings to separately hashed native library; does not authorize launch."""
 import ctypes
 import hashlib
+import threading
 from types import MappingProxyType
 from .protocol import Denied
 
@@ -133,6 +134,7 @@ class NativeProcessFactory:
             from ..runtime.deployment import ListenerNetwork
             if not isinstance(listener_network,ListenerNetwork):raise Denied('typed listener namespace required')
         self.evidence_volume=evidence_volume;self.listener_network=listener_network;self._worker=None
+        self._birth_lock=threading.RLock();self._owned={};self._closed=False
         if len({r['uid'] for r in roles.values()}) != 3:
             raise Denied('separate role UIDs required')
         for spec in self.roles.values():
@@ -142,6 +144,58 @@ class NativeProcessFactory:
                 raise Denied('non-root role identity required')
 
     def spawn(self, role, bootstrap_fd, *, channel_in=-1,channel_out=-1):
+        """Atomic one-birth-per-role enrollment and cancellation boundary.
+
+        Holding the lock across clone/resume/ack closes the cancel-during-birth
+        race: close() observes either no child or the complete retained pidfd.
+        A failed attempted birth cannot be retried under the same factory.
+        """
+        with self._birth_lock:
+            if self._closed: raise Denied('native factory revoked')
+            if role not in self.roles: raise Denied('unknown native role')
+            if role in self._owned: raise Denied('native role birth replay')
+            self._owned[role]=None
+            record=self._spawn_owned(role,bootstrap_fd,channel_in=channel_in,channel_out=channel_out)
+            self._owned[role]=record
+            return record
+
+    def owned_records(self):
+        with self._birth_lock:
+            return tuple(r for r in self._owned.values() if r is not None)
+
+    def revoke_owned(self, preserve_partial, reason):
+        """Owner-only teardown; retained descriptors, never workflow PIDs.
+
+        cgroup.kill targets every owner-fixed role directory to cover unknown
+        descendants. Independent pidfd signals still run if that write fails.
+        NativeJobControl/watchdog remain mandatory independent safeguards.
+        No credential or evidence deletion is performed here.
+        """
+        import os,signal,select
+        from .process import kill_job_cgroup
+        with self._birth_lock:
+            if self._closed:return
+            self._closed=True
+            errors=[]
+            for fd in set(spec['cgroup_fd'] for spec in self.roles.values()):
+                try:kill_job_cgroup(fd)
+                except OSError as exc:errors.append(exc)
+            for record in self.owned_records():
+                try:signal.pidfd_send_signal(record.pidfd,signal.SIGKILL)
+                except ProcessLookupError:pass
+                except OSError as exc:errors.append(exc)
+            for record in self.owned_records():
+                poll=select.poll();poll.register(record.pidfd,select.POLLIN)
+                if not poll.poll(int(self.timeout*1000)):
+                    errors.append(Denied('native descendant cleanup deadline'))
+                    continue
+                try:os.waitid(os.P_PIDFD,record.pidfd,os.WEXITED)
+                except ChildProcessError:pass
+            try:preserve_partial(reason)
+            except BaseException as exc:errors.append(exc)
+            if errors:raise ExceptionGroup('native cleanup incomplete; host watchdog required',errors)
+
+    def _spawn_owned(self, role, bootstrap_fd, *, channel_in=-1,channel_out=-1):
         import os, select, signal
         from .process import ProcessRecord
         if role not in self.roles: raise Denied('unknown native role')
