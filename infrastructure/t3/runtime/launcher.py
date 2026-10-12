@@ -12,6 +12,7 @@ import struct
 import subprocess
 import time
 import signal
+import threading
 from .microvm import Blocked, UnixHTTP
 from .vsock import connect_guest
 
@@ -64,6 +65,7 @@ class LocalLauncher:
         self.binary=binary; self.jail_fd=jail_root_fd
         self.expected_root=expected_jail_device_inode; self.worker_pidfd=worker_pidfd
         self.process=None
+        self._birth_lock=threading.RLock();self.birth_attempted=False
         self.prepared=False
         self.credential_fd=None
 
@@ -95,35 +97,37 @@ class LocalLauncher:
         self.owner_assets=()
 
     def start(self):
-        if self.process is not None: raise Blocked('VMM_ONE_SHOT')
-        self.binary.verify()
-        if hasattr(self,'deployment'):self.deployment.payload()
-        root=os.stat('/')
-        jail=os.fstat(self.jail_fd)
-        if (root.st_dev,root.st_ino)!=(jail.st_dev,jail.st_ino) or (root.st_dev,root.st_ino)!=self.expected_root:
-            raise Blocked('LAUNCHER_NOT_IN_TRUSTED_JAIL')
-        if os.geteuid()==0: raise Blocked('VMM_PRIVILEGE_NOT_DROPPED')
-        import select
-        poll=select.poll(); poll.register(self.worker_pidfd,select.POLLIN)
-        if poll.poll(0): raise Blocked('WORKER_NOT_LIVE')
-        if not os.path.exists('/dev/kvm'): raise Blocked('LOCAL_KVM_MISSING')
-        if os.path.lexists('/firecracker.socket') or os.path.lexists('/private-control.vsock'):
-            raise Blocked('VMM_STALE_OR_SUBSTITUTED_SOCKET')
-        # Kernel/root/evidence mounts and credentials are provisioned by native
-        # supervisor BEFORE this launcher enters the jail. No shell/env fallback.
-        self.process=subprocess.Popen(['firecracker','--api-sock','/firecracker.socket'],
-            executable='/proc/self/fd/'+str(self.binary.fd),
-            pass_fds=(self.binary.fd,), stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            env={'PATH':'/nonexistent'},close_fds=True)
-        try:self.pidfd=os.pidfd_open(self.process.pid)
-        except BaseException:
-            # Child is still owned and unreaped: its PID cannot be reused.
-            try:self.process.kill()
-            finally:self.process.wait(timeout=10)
-            self.process=None
-            raise
-        return self.pidfd
+        with self._birth_lock:
+            if self.birth_attempted or self.process is not None: raise Blocked('VMM_ONE_SHOT')
+            self.birth_attempted=True
+            self.binary.verify()
+            if hasattr(self,'deployment'):self.deployment.payload()
+            root=os.stat('/')
+            jail=os.fstat(self.jail_fd)
+            if (root.st_dev,root.st_ino)!=(jail.st_dev,jail.st_ino) or (root.st_dev,root.st_ino)!=self.expected_root:
+                raise Blocked('LAUNCHER_NOT_IN_TRUSTED_JAIL')
+            if os.geteuid()==0: raise Blocked('VMM_PRIVILEGE_NOT_DROPPED')
+            import select
+            poll=select.poll(); poll.register(self.worker_pidfd,select.POLLIN)
+            if poll.poll(0): raise Blocked('WORKER_NOT_LIVE')
+            if not os.path.exists('/dev/kvm'): raise Blocked('LOCAL_KVM_MISSING')
+            if os.path.lexists('/firecracker.socket') or os.path.lexists('/private-control.vsock'):
+                raise Blocked('VMM_STALE_OR_SUBSTITUTED_SOCKET')
+            # Kernel/root/evidence mounts and credentials are provisioned by native
+            # supervisor BEFORE this launcher enters the jail. No shell/env fallback.
+            self.process=subprocess.Popen(['firecracker','--api-sock','/firecracker.socket'],
+                executable='/proc/self/fd/'+str(self.binary.fd),
+                pass_fds=(self.binary.fd,), stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                env={'PATH':'/nonexistent'},close_fds=True)
+            try:self.pidfd=os.pidfd_open(self.process.pid)
+            except BaseException:
+                # Child is still owned and unreaped: its PID cannot be reused.
+                try:self.process.kill()
+                finally:self.process.wait(timeout=10)
+                self.process=None
+                raise
+            return self.pidfd
 
     def api(self):
         if self.process is None: raise Blocked('VMM_NOT_STARTED')
@@ -155,14 +159,15 @@ class LocalLauncher:
 
     def stop(self):
         """Signal original pidfd, reap owned child, never kill recycled PID."""
-        if self.process is None:return
-        try:
-            signal.pidfd_send_signal(self.pidfd,signal.SIGKILL)
-        except ProcessLookupError:pass
-        finally:
-            self.process.wait(timeout=10)
-            os.close(self.pidfd)
-            self.process=None
+        with self._birth_lock:
+            if self.process is None:return
+            try:
+                signal.pidfd_send_signal(self.pidfd,signal.SIGKILL)
+            except ProcessLookupError:pass
+            finally:
+                self.process.wait(timeout=10)
+                os.close(self.pidfd)
+                self.process=None
 
     def guest(self):
         if self.process is None: raise Blocked('VMM_NOT_STARTED')
@@ -197,7 +202,6 @@ class LocalLauncher:
             self.credential_fd=fd; self.certificate=certificate; self.prepared=True
             return pidfd,fd
         except BaseException:
-            import signal
             self.stop()
             raise
 
