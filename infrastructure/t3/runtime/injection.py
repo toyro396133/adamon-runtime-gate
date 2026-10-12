@@ -1,6 +1,7 @@
 """Signed bounded local guest provisioning. No command, path or module input."""
 import hashlib
 import time
+import threading
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from .guest import canonical, validate_binding
 from .microvm import Blocked
@@ -46,9 +47,13 @@ class InjectionVerifier:
         if type(completion_public_key) is not bytes or len(completion_public_key)!=32:
             raise Blocked('INJECTION_KEY')
         self.completion_key=completion_public_key.hex()
-        self.binding=dict(expected_binding); self.clock=clock; self.used=False
+        self.binding=dict(expected_binding); self.clock=clock; self.used=False; self._lock=threading.Lock()
 
     def consume(self, envelope, source_bytes, fixture_bytes):
+        with self._lock:
+            return self._consume(envelope, source_bytes, fixture_bytes)
+
+    def _consume(self, envelope, source_bytes, fixture_bytes):
         if self.used: raise Blocked('INJECTION_REPLAY')
         if type(envelope) is not dict or set(envelope)!={'payload','signature_hex'}:
             raise Blocked('INJECTION_ENVELOPE')

@@ -10,6 +10,8 @@ import os
 import socket
 import struct
 import subprocess
+import time
+import signal
 from .microvm import Blocked, UnixHTTP
 from .vsock import connect_guest
 
@@ -65,9 +67,37 @@ class LocalLauncher:
         self.prepared=False
         self.credential_fd=None
 
+    @classmethod
+    def from_owner_assets(cls,deployment,worker_pidfd):
+        """Fixed native-jail filenames, verified against owner-signed authority.
+
+        Pinned Launcher image calls this before guard/key delivery. No filename
+        is accepted from Workflow, guest or RPC. Guest/VMM live use unverified.
+        """
+        pins=deployment.payload()['images']
+        retained=[]
+        try:
+            for path,name in (('/firecracker','firecracker'),('/kernel','kernel'),('/rootfs','rootfs')):
+                fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_CLOEXEC)
+                retained.append(fd);ImmutableFD(fd,pins[name]).verify()
+            jail=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_CLOEXEC)
+            retained.append(jail);root=os.fstat(jail)
+            value=cls(ImmutableFD(retained[0],pins['firecracker']),jail,(root.st_dev,root.st_ino),worker_pidfd)
+            value.owner_assets=tuple(retained);value.deployment=deployment
+            return value
+        except BaseException:
+            for fd in retained:os.close(fd)
+            raise
+
+    def close_owner_assets(self):
+        if self.process is not None:raise Blocked('VMM_ASSETS_STILL_IN_USE')
+        for fd in getattr(self,'owner_assets',()):os.close(fd)
+        self.owner_assets=()
+
     def start(self):
         if self.process is not None: raise Blocked('VMM_ONE_SHOT')
         self.binary.verify()
+        if hasattr(self,'deployment'):self.deployment.payload()
         root=os.stat('/')
         jail=os.fstat(self.jail_fd)
         if (root.st_dev,root.st_ino)!=(jail.st_dev,jail.st_ino) or (root.st_dev,root.st_ino)!=self.expected_root:
@@ -77,6 +107,8 @@ class LocalLauncher:
         poll=select.poll(); poll.register(self.worker_pidfd,select.POLLIN)
         if poll.poll(0): raise Blocked('WORKER_NOT_LIVE')
         if not os.path.exists('/dev/kvm'): raise Blocked('LOCAL_KVM_MISSING')
+        if os.path.lexists('/firecracker.socket') or os.path.lexists('/private-control.vsock'):
+            raise Blocked('VMM_STALE_OR_SUBSTITUTED_SOCKET')
         # Kernel/root/evidence mounts and credentials are provisioned by native
         # supervisor BEFORE this launcher enters the jail. No shell/env fallback.
         self.process=subprocess.Popen(['firecracker','--api-sock','/firecracker.socket'],
@@ -84,7 +116,13 @@ class LocalLauncher:
             pass_fds=(self.binary.fd,), stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             env={'PATH':'/nonexistent'},close_fds=True)
-        self.pidfd=os.pidfd_open(self.process.pid)
+        try:self.pidfd=os.pidfd_open(self.process.pid)
+        except BaseException:
+            # Child is still owned and unreaped: its PID cannot be reused.
+            try:self.process.kill()
+            finally:self.process.wait(timeout=10)
+            self.process=None
+            raise
         return self.pidfd
 
     def api(self):
@@ -97,6 +135,34 @@ class LocalLauncher:
                 raise Blocked('VMM_API_PEER_IDENTITY')
         except BaseException: stream.close(); raise
         return UnixHTTP(stream)
+
+    def await_api(self, timeout=10, clock=time.monotonic):
+        """Bound startup; never accept a stale peer or continue failed birth."""
+        if type(timeout) not in (int,float) or not 0<timeout<=30:
+            raise Blocked('VMM_STARTUP_TIMEOUT_BOUND')
+        deadline=clock()+timeout
+        try:
+            while clock()<deadline:
+                if self.process is None or self.process.poll() is not None:
+                    raise Blocked('VMM_EARLY_EXIT')
+                try:return self.api()
+                except (FileNotFoundError,ConnectionRefusedError):
+                    time.sleep(min(.02,max(0,deadline-clock())))
+            raise Blocked('VMM_STARTUP_TIMEOUT')
+        except BaseException:
+            self.stop()
+            raise
+
+    def stop(self):
+        """Signal original pidfd, reap owned child, never kill recycled PID."""
+        if self.process is None:return
+        try:
+            signal.pidfd_send_signal(self.pidfd,signal.SIGKILL)
+        except ProcessLookupError:pass
+        finally:
+            self.process.wait(timeout=10)
+            os.close(self.pidfd)
+            self.process=None
 
     def guest(self):
         if self.process is None: raise Blocked('VMM_NOT_STARTED')
@@ -132,8 +198,7 @@ class LocalLauncher:
             return pidfd,fd
         except BaseException:
             import signal
-            try: signal.pidfd_send_signal(pidfd,signal.SIGKILL)
-            except ProcessLookupError: pass
+            self.stop()
             raise
 
 

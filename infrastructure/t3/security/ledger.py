@@ -1,11 +1,12 @@
 """One authoritative SQLite ledger, never a separately granting local mirror."""
 import sqlite3
 import time
+from types import MappingProxyType
 from .protocol import Denied, canonical, digest, verify
 
 class Ledger:
     def __init__(self, path, owner_keys, payload_validator, clock=time.time):
-        self.path, self.keys, self.clock = path, owner_keys, clock
+        self.path, self.keys, self.clock = path, MappingProxyType(dict(owner_keys)), clock
         self.payload_validator = payload_validator
         with self.connect() as db:
             db.executescript('''CREATE TABLE IF NOT EXISTS permits(
@@ -130,3 +131,22 @@ class Ledger:
                 self.event(db,dict(action='SESSION_ENDED',permit=permit_id,session=session,reason=reason))
             db.commit()
         return bool(changed)
+
+    def require_issued(self,permit_id,binding):
+        """Read-only pre-delivery check, never consumes or grants a session.
+
+        Full signed-payload bindings must be present. Caller must still perform
+        channel challenge and atomic consume; another consumer wins the race.
+        """
+        from .protocol import decode
+        now=int(self.clock())
+        with self.connect() as db:
+            row=db.execute('SELECT payload,state FROM permits WHERE id=?',(permit_id,)).fetchone()
+            if row is None or row[1]!='ISSUED':raise Denied('bootstrap permit not issued')
+            if db.execute('SELECT 1 FROM revocations WHERE id=?',(permit_id,)).fetchone():raise Denied('bootstrap permit revoked')
+            p=decode(row[0])
+            if not p['not_before']<=now<p['expires_at'] or now>=p['execution_deadline']:raise Denied('bootstrap permit expired')
+            metadata={'version','permit_id','issuer_key_id','attempt','issued_at','not_before','expires_at','execution_deadline','revocation_epoch'}
+            if not set(p)-metadata<=binding.keys() or any(k not in p or canonical(p[k])!=canonical(v) for k,v in binding.items()):
+                raise Denied('bootstrap permit full binding mismatch')
+            return MappingProxyType(p)

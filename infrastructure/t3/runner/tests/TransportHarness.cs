@@ -2,6 +2,7 @@ using System;using System.Reflection;using System.Threading;using Newtonsoft.Jso
 public static class TransportHarness {
  public static int Main(string[] args) {
   try {
+   if(args[0]=="--validate") { P4ProtectedBridge.ValidateAssignment(args[1]); return 0; }
    int fd=int.Parse(args[0]);var request=JObject.Parse(args[1]);
    int[] descriptors=args.Length==4?new[]{int.Parse(args[2]),int.Parse(args[3])}:null;
    var flags=BindingFlags.NonPublic|BindingFlags.Static;

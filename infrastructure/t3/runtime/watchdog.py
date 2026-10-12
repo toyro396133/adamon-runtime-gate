@@ -6,7 +6,7 @@ import time
 
 
 def monitor(supervisor_pidfd, process_pidfds, cgroup_kill_fd, control_fd,
-            partial_marker_fd, deadline, clock=time.monotonic):
+            partial_marker_fd, deadline, clock=time.monotonic, cgroup_events_fd=None):
     """Run in dedicated trusted supervisor process outside the Job cgroup.
 
     STOP means successful Job cleanup already acknowledged; otherwise supervisor
@@ -27,7 +27,21 @@ def monitor(supervisor_pidfd, process_pidfds, cgroup_kill_fd, control_fd,
             # Closed protocol single byte. No command, PID, path, renewed
             # deadline or authorization is accepted from this channel.
             value=os.read(control_fd,2)
-            if value==b'S': return 'ACKNOWLEDGED_CLEANUP'
+            if value==b'S':
+                # A supervisor acknowledgement is not proof descendants died.
+                # Require both original pidfds and kernel cgroup population.
+                all_dead=True
+                for pidfd in process_pidfds:
+                    check=select.poll();check.register(pidfd,select.POLLIN)
+                    if not check.poll(0):all_dead=False
+                empty=False
+                if cgroup_events_fd is not None:
+                    try:
+                        raw=os.pread(cgroup_events_fd,4096,0)
+                        empty=b'populated 0\n' in raw and b'populated 1' not in raw
+                    except OSError:pass
+                if all_dead and empty:return 'ACKNOWLEDGED_CLEANUP'
+                reason='WATCHDOG_PREMATURE_STOP';break
             reason='WATCHDOG_REVOKED' if value==b'R' else 'WATCHDOG_CHANNEL_LOST'
             break
     failures=[]

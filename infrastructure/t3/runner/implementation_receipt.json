@@ -3,9 +3,11 @@
     "bridge_CSharp_compile": "PASS_WITH_CS1701_REFERENCE_WARNING",
     "fresh_pinned_checkout_apply": "PASS",
     "pinned_source_accessibility_review": "FIXED_SDK_INTERNAL_MAPPING_COUNT_USE_PUBLIC_ENUMERATOR",
+    "pre_masker_json_errors": "SANITIZED_WITHOUT_RAW_FRAGMENT_OR_INNER_EXCEPTION",
     "real_Unix_stream_and_SCM_RIGHTS_tests": {
       "failed": 0,
-      "passed": 7
+      "passed": 8,
+      "scope": "real compiled bridge transport and pre-masker sanitization; upstream types remain test doubles"
     },
     "wire_normalization_tests": {
       "passed": 13,
@@ -44,12 +46,13 @@
   "license_sha256": "621a1e0b6163b9d63fe780b9d6f5a7f775a5781065024a1ebf8010726c44cec1",
   "patch_sha256": "0d34cced9e9ebfbd334d744812dc052e95df96ba04ccc3b0195276ad2242331d",
   "patched_source_sha256": {
-    "src/Runner.Common/P4ProtectedBridge.cs": "358a619fc2d8c1fe79486e23c1a207735bdcab3a1129fb7082e3ffaf8af9abec",
+    "src/Runner.Common/P4ProtectedBridge.cs": "b28a308a82ba0e8336e11d06f0f856c23b4e15b75613daaef2862f3bd0b4fe7d",
     "src/Runner.Listener/JobDispatcher.cs": "45ceb7136940a91333bc7925f06e4db1add5eaabc54d26c8b68a5fc20803f755",
     "src/Runner.Worker/JobRunner.cs": "46391826dad5639840a79a75f587d23fa720376f2b58bd1c2ab865b12ddec948",
     "src/Runner.Worker/StepsRunner.cs": "bbbc6ea42efe8ec662632fdbfb1b0af380c1b41d112eeab429395c20ffa98969",
     "src/Runner.Worker/Worker.cs": "9ae33af765be39fb5c80c1407946d99c9acb2b9a480afa2f9e41d962f0f2df02"
   },
+  "patched_source_tree_oid": "dd76b7e1054d1e4070b1024ec27466474154500e",
   "privileged_spawn_isolation": "UNVERIFIED",
   "publication": "patch bundle in runtime-gate implementation branch; no additional remote fork required",
   "registration_broker_legacy": "UNVERIFIED",

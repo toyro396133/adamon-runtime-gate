@@ -35,3 +35,20 @@ def test_signed_wrong_assignment_tuple_with_same_job_and_raw_hash(changed):
             with open(tmp+'/partial') as f:assert f.read()=='SESSION_FAILED'
             with ledger.connect() as db:assert db.execute('SELECT state FROM permits').fetchone()[0]=='ISSUED'
     finally:os.close(launcher.pidfd)
+
+
+def test_session_keeps_deep_canonical_request_and_binding_snapshot():
+    launcher=record(SimpleNamespace(pid=os.getpid()))
+    request={'operation':'NONRESEARCH_HANDSHAKE_ONLY','nested':{'version_id':'original'}}
+    binding={'client_spki_sha256':'a'*64,'request_sha256':digest(request),'nested':{'source':'pinned'}}
+    try:
+        controller=SessionController(supervisor=None,launcher=launcher,ledger=None,permit_id='snapshot',
+            binding=binding,request=request,context=None,ca=None,oid=None,expected_spki='a'*64,
+            kill_job=lambda:None,preserve_partial=lambda _:None)
+        request['nested']['version_id']='changed-after-construction'
+        binding['nested']['source']='changed-after-construction'
+        assert controller.request['nested']['version_id']=='original'
+        assert controller.binding['nested']['source']=='pinned'
+        returned=controller.request;returned['nested']['version_id']='changed-through-getter'
+        assert controller.request['nested']['version_id']=='original'
+    finally:os.close(launcher.pidfd)

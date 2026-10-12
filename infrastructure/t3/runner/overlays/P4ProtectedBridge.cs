@@ -152,6 +152,11 @@ namespace GitHub.Runner.Common
             catch { /* Supervisor watches process/pidfd/channel death independently. No compute fallback. */ }
         }
         public static void ValidateAssignment(string raw) {
+            try { ValidateAssignmentCore(raw); }
+            catch (JsonException) { throw new InvalidOperationException("P4_INVALID_ASSIGNMENT_JSON"); }
+            catch (FormatException) { throw new InvalidOperationException("P4_INVALID_ASSIGNMENT_FORMAT"); }
+        }
+        private static void ValidateAssignmentCore(string raw) {
             // Duplicate JSON is rejected before typed deserialization to prevent competing meanings.
             JObject.Parse(raw,new JsonLoadSettings{DuplicatePropertyNameHandling=DuplicatePropertyNameHandling.Error});
             var message=StringUtil.ConvertFromJson<AgentJobRequestMessage>(raw);

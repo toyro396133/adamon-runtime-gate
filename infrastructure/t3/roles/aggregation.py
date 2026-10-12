@@ -1,5 +1,6 @@
 """Terminal AND gate over approved receipts and immutable audit manifest contents."""
 from dataclasses import dataclass
+from collections.abc import Mapping
 from .receipts import ReceiptError,canonical,seal
 import hashlib
 
@@ -15,6 +16,10 @@ class CampaignRegistry:
     gate_assertions: dict
     control_assertions: dict
     micro_authorities: dict = None
+    def __post_init__(self):
+        from .immutable import freeze
+        for name in ("life", "micro", "gates", "controls", "cycle_counts", "micro_bindings", "gate_assertions", "control_assertions", "micro_authorities"):
+            object.__setattr__(self,name,freeze(getattr(self,name)))
     def validate(self):
         if (len(self.life),len(self.gates),len(self.micro))!=(27,23,2):raise ReceiptError('registry cardinality')
         for group in (self.life,self.micro,self.gates,self.controls):
@@ -25,7 +30,7 @@ class CampaignRegistry:
         import re
         fields={'registry_sha256','fixture_sha256','schedule_sha256','life_cycles','structural_direct_processings','direct_batch_calls'}
         for binding in self.micro_bindings.values():
-            if type(binding) is not dict or set(binding)!=fields:raise ReceiptError('closed micro binding required')
+            if not isinstance(binding,Mapping) or set(binding)!=fields:raise ReceiptError('closed micro binding required')
             for name in fields:
                 value=binding[name]
                 if name.endswith('_sha256'):

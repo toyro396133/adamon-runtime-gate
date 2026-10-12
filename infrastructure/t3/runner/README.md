@@ -43,7 +43,7 @@ DOTNET_CLI_TELEMETRY_OPTOUT=1 dotnet build src/Runner.Listener/Runner.Listener.c
 החבילה אינה runner מותקן, אינה execution freeze ואינה הרשאה למחקר.
 
 המוביל אימת מחדש החלה על checkout נקי ומוצמד. source tree המתקבל הוא
-`6ff195e6613abfd22664e4ae7b847680d5e0c42d`, וחותמות ארבעת השינויים וה־overlay
+`dd76b7e1054d1e4070b1024ec27466474154500e`, וחותמות ארבעת השינויים וה־overlay
 ב־`implementation_receipt.json`. `UPSTREAM_LICENSE` משמר את רישיון המקור.
 לא נוצר מאגר fork מרוחק נוסף; ה־patch הציבורי משחזר מקור מותאם מדויק.
 
@@ -93,3 +93,21 @@ src/Sdk/DTObjectTemplating/ObjectTemplating/Tokens/MappingToken.cs ו־src/Sdk/I
 ואינה משנה סמכות מחקר או מתיימרת להיות SHA של מקטע JSON מקורי.
 Step Unicode או מספר float שאינם מתקבלים ב־codec נדחים סגור. היתר הבעלים
 חייב להשתמש באותה הגדרה בדיוק; אין קבלה של hash שנבחר על ידי Workflow.
+
+### בדיקת graph בנייה ללא רשת — 2026-10-12
+
+`build_graph.py` קורא רק checkout קיים. הוא מאמת HEAD, חמשת קובצי ה־patch,
+כל csproj בגרף Listener/Worker, global.json ו־Directory.Build.props מול המקור
+המוצמד; דוחה ProjectReference החורג מן המקור ו־PackageReference צף. אין restore,
+הורדה או הרצת Runner. `build_prerequisites_receipt.json` מתעד את חמשת הפרויקטים,
+גרסאות התלויות הישירות והחסר ב־assets. גרסאות ישירות אינן lock לתלויות טרנזיטיביות:
+ה־receipt מסמן במפורש שגם אימות content pins של NuGet וגם build מלא חסרים.
+פקודת הבנייה המוצעת כוללת `--no-restore`, ואינה workflow מותקן.
+
+### מניעת חשיפה בשגיאת פענוח מוקדמת
+
+ValidateAssignment מסנן JsonException ו־FormatException לפני שה־Worker יכול
+להתקין SecretMasker. החריגה מוחלפת בקוד קבוע ללא inner exception או fragment.
+שמונה בדיקות C# עברו על ה־bridge המעודכן: שבע בדיקות התעבורה ועוד שליחת
+JSON פגום עם sentinel ווידוא שאינו מופיע ב־stdout/stderr. הקומפילציה עדיין
+משתמשת ב־upstream-shape doubles; אזהרת CS1701 נשארת ו־Runner מלא לא נבנה.

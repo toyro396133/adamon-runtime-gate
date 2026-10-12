@@ -40,6 +40,12 @@ class TransportTests(unittest.TestCase):
     def test_response_boolean_version(self):self.assertNotEqual(self.exchange('boolean_version')[0],0)
     def test_response_duplicate_field(self):self.assertNotEqual(self.exchange('duplicate')[0],0)
     def test_supervisor_denial(self):self.assertNotEqual(self.exchange('blocked')[0],0)
+    def test_pre_masker_json_error_has_no_raw_fragment(self):
+        sentinel='PRIVATE_SENTINEL_NEVER_PUBLIC'
+        p=subprocess.run([DOTNET,HARNESS,'--validate','{"'+sentinel+'":invalid}'],capture_output=True,text=True,timeout=5)
+        self.assertNotEqual(p.returncode,0)
+        self.assertNotIn(sentinel,p.stdout+p.stderr)
+        self.assertIn('P4_INVALID_ASSIGNMENT_JSON',p.stderr)
     def test_no_private_descriptor(self):
         request={'version':1,'operation':'worker_ack','request_id':str(uuid.uuid4()),'payload':{}}
         p=subprocess.run([DOTNET,HARNESS,'199',json.dumps(request)],capture_output=True,text=True,timeout=5)

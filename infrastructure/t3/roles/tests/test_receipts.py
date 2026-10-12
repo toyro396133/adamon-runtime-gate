@@ -43,14 +43,19 @@ class Receipts(unittest.TestCase):
   r=CampaignRegistry(life,micros,gates,controls,{k:10 for k in life},gates[0],{m:{'life_cycles':1,'structural_direct_processings':0,'direct_batch_calls':0,'fixture_sha256':'a'*64,'schedule_sha256':'b'*64,'registry_sha256':'c'*64} for m in micros},{g:{'verified':True} for g in gates},{'control0':{'performed':True}})
   a=Aggregator(r,self.v,None)
   with self.assertRaises(ReceiptError):a.evaluate([])
-  r.gate_assertions[gates[0]]={}
-  with self.assertRaises(ReceiptError):r.validate()
+  from dataclasses import replace
+  with self.assertRaises(TypeError):r.gate_assertions[gates[0]]={}
+  assertions=dict(r.gate_assertions);assertions[gates[0]]={}
+  with self.assertRaises(ReceiptError):replace(r,gate_assertions=assertions).validate()
  def test_empty_micro_binding_rejected(self):
   life=tuple('case'+str(i) for i in range(27));gates=tuple('gate'+str(i) for i in range(23));micros=('micro0','micro1')
   r=CampaignRegistry(life,micros,gates,('control0',),{k:10 for k in life},gates[0],{m:{} for m in micros},{g:{'verified':True} for g in gates},{'control0':{'performed':True}})
   with self.assertRaises(ReceiptError):r.validate()
  def test_missing_permit_subject_rejected(self):
-  self.v.authority.permit_bindings['p'].pop('case')
+  from dataclasses import replace
+  bindings={key:dict(value) for key,value in self.v.authority.permit_bindings.items()}
+  bindings['p'].pop('case')
+  self.v=ReceiptVerifier(replace(self.v.authority,permit_bindings=bindings))
   with self.assertRaises(ReceiptError):self.v.verify(seal(self.p,'AUDIT','SYNTHETIC',self.key),'AUDIT','dummy')
  def test_terminal_without_authority_rejected(self):
   r=CampaignRegistry(tuple('c'+str(i) for i in range(27)),('m0','m1'),tuple('g'+str(i) for i in range(23)),('x',),{'c'+str(i):10 for i in range(27)},'g0',{'m0':{},'m1':{}},{'g'+str(i):{'actual':True} for i in range(23)},{'x':{'actual':True}})

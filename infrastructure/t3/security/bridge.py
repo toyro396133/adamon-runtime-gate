@@ -65,8 +65,9 @@ def send(sock, value):
     sock.sendall(struct.pack('!I',len(body))+body)
 
 def handle(sock, role, supervisor):
-    message,fds=receive(sock,role)
+    message=None;fds=[]
     try:
+        message,fds=receive(sock,role)
         # A separately reviewed supervisor is mandatory. No implicit successful ack.
         if supervisor is None: raise Denied('trusted supervisor unavailable')
         result=supervisor.handle_private_message(role,message,fds)
@@ -75,7 +76,7 @@ def handle(sock, role, supervisor):
             send(sock,{'version':1,'operation':message['operation'],'request_id':message['request_id'],'status':'COMPLETE','exit_code':result})
     except Denied:
         if supervisor is not None: supervisor.revoke('bridge_failure')
-        if message['operation']!='revoke':
+        if message is not None and message['operation']!='revoke':
             send(sock,{'version':1,'operation':message['operation'],'request_id':message['request_id'],'status':'BLOCKED','exit_code':1})
     except BaseException:
         if supervisor is not None: supervisor.revoke('bridge_failure')

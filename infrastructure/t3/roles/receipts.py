@@ -1,5 +1,6 @@
 """Accepted receipt schema is privately injected and pinned; no research IDs here."""
 from dataclasses import dataclass
+from collections.abc import Mapping
 import hashlib
 import json
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -12,15 +13,19 @@ def canonical(value):
         if isinstance(v,str) and not v.isascii(): raise ReceiptError('ASCII required')
         if isinstance(v,float): raise ReceiptError('floats forbidden')
         if isinstance(v,int) and not isinstance(v,bool) and abs(v)>2**53-1: raise ReceiptError('integer range')
-        if isinstance(v,dict):
+        if isinstance(v,Mapping):
             for k,x in v.items():
                 if not isinstance(k,str):raise ReceiptError('string key required')
                 check(k);check(x)
-        elif isinstance(v,list):
+        elif isinstance(v,(tuple,list)):
             for x in v:check(x)
         elif v is not None and not isinstance(v,(str,int,bool)):raise ReceiptError('unsupported type')
     check(value)
-    return json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=True).encode()
+    def plain(v):
+        if isinstance(v,Mapping):return {k:plain(x) for k,x in v.items()}
+        if isinstance(v,(tuple,list)):return [plain(x) for x in v]
+        return v
+    return json.dumps(plain(value),sort_keys=True,separators=(',',':'),ensure_ascii=True).encode()
 
 @dataclass(frozen=True)
 class ReceiptAuthority:
@@ -33,6 +38,11 @@ class ReceiptAuthority:
     schema_sha256: str
     # Mapping immutable permit IDs to the exact private live-issued job bindings.
     permit_bindings: dict
+
+    def __post_init__(self):
+        from .immutable import freeze
+        for name in ("keys", "domains", "permit_bindings"):
+            object.__setattr__(self,name,freeze(getattr(self,name)))
 
 class ReceiptVerifier:
     def __init__(self,authority):
@@ -52,7 +62,7 @@ class ReceiptVerifier:
             if payload[key]!=getattr(self.authority,key):raise ReceiptError('authority mismatch')
         binding=self.authority.permit_bindings.get(payload['permit_id'])
         required={'role','authority_sha256','source_sha256','environment_sha256','run_id','job_id','run_attempt','host_id','session_id','boot_id','dispatch_id','worker_instance_id','worker_job_guid','worker_request_id','plan_guid','listener_binary_sha256','worker_binary_sha256','launcher_binary_sha256','assignment_sha256','worker_uid','launcher_uid','worker_start_monotonic_ns','launcher_start_monotonic_ns','worker_pidfd_registry_id','launcher_pidfd_registry_id','cgroup_identity'}
-        if not binding or not required<=binding.keys() or any(type(payload.get(k)) is not type(v) or payload.get(k)!=v for k,v in binding.items()):raise ReceiptError('unbound permit/job/launcher')
+        if not binding or not required<=binding.keys() or any((not isinstance(payload.get(k),Mapping) or canonical(payload[k])!=canonical(v)) if isinstance(v,Mapping) else (type(payload.get(k)) is not type(v) or payload.get(k)!=v) for k,v in binding.items()):raise ReceiptError('unbound permit/job/launcher')
         if binding.get('role')!=role:raise ReceiptError('permit role mismatch')
         subject_field='case' if 'case' in payload else 'control_id' if 'control_id' in payload else None
         if subject_field is not None and (subject_field not in binding or binding[subject_field]!=actual):

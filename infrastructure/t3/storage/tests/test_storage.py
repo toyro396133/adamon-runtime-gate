@@ -128,7 +128,7 @@ class RemoteContractTests(unittest.TestCase):
         with self.assertRaises(StorageFailure):self.writer.put(b'bytes')
     def test_roundtrip_exact_pinned_version(self):
         self.ready();receipt=self.writer.put(b'bytes')
-        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='a'*64,attempt_id='attempt1',trusted_key=self.key.public_key(),trusted_key_id='broker')
+        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='a'*64,attempt_id='attempt1',trusted_key=self.key.public_key(),trusted_key_id='broker',kms_key_arn=self.client.kms)
         self.assertEqual(reader.read(receipt),b'bytes')
         self.assertTrue(all(c[1]['VersionId']=='pinned-version' for c in self.client.calls if c[0]=='get'))
     def test_configuration_failures(self):
@@ -162,22 +162,43 @@ class RemoteContractTests(unittest.TestCase):
         self.assertFalse(any(c[0]=='complete' for c in self.client.calls))
     def test_partial_reviewer_cannot_pass_complete(self):
         self.ready();receipt=self.writer.put(b'partial','SEALED_PARTIAL')
-        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='a'*64,attempt_id='attempt1',trusted_key=self.key.public_key(),trusted_key_id='broker')
+        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='a'*64,attempt_id='attempt1',trusted_key=self.key.public_key(),trusted_key_id='broker',kms_key_arn=self.client.kms)
         with self.assertRaises(StorageFailure):reader.read(receipt)
         self.assertEqual(reader.read(receipt,require_complete=False),b'partial')
     def test_wrong_namespace(self):
-        with self.assertRaises(StorageFailure):S3EvidenceReader(self.client,bucket='test',authority_sha256='a'*64,attempt_id='../',trusted_key=self.key.public_key(),trusted_key_id='key')
+        with self.assertRaises(StorageFailure):S3EvidenceReader(self.client,bucket='test',authority_sha256='a'*64,attempt_id='../',trusted_key=self.key.public_key(),trusted_key_id='key',kms_key_arn=self.client.kms)
     def test_other_campaign_namespace_rejected(self):
         self.ready();receipt=self.writer.put(b'bytes')
-        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='b'*64,attempt_id='attempt1',trusted_key=self.key.public_key(),trusted_key_id='broker')
+        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='b'*64,attempt_id='attempt1',trusted_key=self.key.public_key(),trusted_key_id='broker',kms_key_arn=self.client.kms)
         before=len(self.client.calls)
         with self.assertRaises(StorageFailure):reader.read(receipt)
         self.assertEqual(len(self.client.calls),before)
     def test_other_attempt_namespace_rejected(self):
         self.ready();receipt=self.writer.put(b'bytes')
-        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='a'*64,attempt_id='attempt2',trusted_key=self.key.public_key(),trusted_key_id='broker')
+        reader=S3EvidenceReader(self.client,bucket='private-test',authority_sha256='a'*64,attempt_id='attempt2',trusted_key=self.key.public_key(),trusted_key_id='broker',kms_key_arn=self.client.kms)
         with self.assertRaises(StorageFailure):reader.read(receipt)
     def test_short_retention_rejected(self):
         with self.assertRaises(StorageFailure):S3EvidenceWriter(self.client,bucket='test',kms_key_arn=self.client.kms,authority_sha256='a'*64,attempt_id='attempt1',signer=self.key,signer_key_id='broker',retention_until=datetime.now(timezone.utc)+timedelta(days=1))
 
 if __name__=='__main__':unittest.main()
+
+
+def test_reviewer_checks_exact_kms_and_compliance_before_body():
+    client=FakeS3();key=Ed25519PrivateKey.generate()
+    writer=S3EvidenceWriter(client,bucket='private-test',kms_key_arn=client.kms,authority_sha256='a'*64,attempt_id='attempt1',signer=key,signer_key_id='broker')
+    writer.verify_configuration();receipt=writer.put(b'original')
+    reader=S3EvidenceReader(client,bucket='private-test',authority_sha256='a'*64,attempt_id='attempt1',trusted_key=key.public_key(),trusted_key_id='broker',kms_key_arn=client.kms)
+    before=len(client.calls);client.mode='GOVERNANCE'
+    import pytest
+    with pytest.raises(StorageFailure,match='COMPLIANCE'):reader.read(receipt)
+    assert len(client.calls)==before
+    client.mode='COMPLIANCE';client.kms='arn:aws:kms:region:account:key/foreign'
+    with pytest.raises(StorageFailure,match='encryption'):reader.read(receipt)
+    assert len(client.calls)==before
+
+
+def test_retention_cannot_be_short_by_one_minute():
+    import pytest
+    client=FakeS3();key=Ed25519PrivateKey.generate()
+    with pytest.raises(StorageFailure,match='365'):
+        S3EvidenceWriter(client,bucket='private-test',kms_key_arn=client.kms,authority_sha256='a'*64,attempt_id='attempt1',signer=key,signer_key_id='broker',retention_until=datetime.now(timezone.utc)+timedelta(days=365,minutes=-1))

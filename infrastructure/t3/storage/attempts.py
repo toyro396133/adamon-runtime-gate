@@ -33,12 +33,14 @@ class AttemptChain:
         self.path=path;self.signer=signer;self.key_id=key_id
         with sqlite3.connect(path) as c:
             c.executescript('CREATE TABLE IF NOT EXISTS attempts(seq INTEGER PRIMARY KEY, envelope BLOB NOT NULL, digest TEXT UNIQUE NOT NULL); CREATE TRIGGER IF NOT EXISTS attempts_no_update BEFORE UPDATE ON attempts BEGIN SELECT RAISE(ABORT,"append only"); END; CREATE TRIGGER IF NOT EXISTS attempts_no_delete BEFORE DELETE ON attempts BEGIN SELECT RAISE(ABORT,"append only"); END;')
-    def append(self,record):
+    def append(self,record,*,expected_head_sha256=None):
         validate_record(record)
         with sqlite3.connect(self.path) as c:
             c.execute('BEGIN IMMEDIATE')
             entries=[json.loads(row[0]) for row in c.execute('SELECT envelope FROM attempts ORDER BY seq')]
             verify_chain(entries,self.signer.public_key(),self.key_id)
+            if expected_head_sha256 is not None and (not entries or sha(canonical(entries[-1]))!=expected_head_sha256):
+                raise StorageFailure("stale attempt head; atomic append refused")
             own=[e['record'] for e in entries if all(e['record'][k]==record[k] for k in ('campaign_id','attempt_id','subject_id'))]
             if (not own and record['state']!='STARTED') or (own and (len(own)!=1 or record['state']=='STARTED' or own[0]['source_sha256']!=record['source_sha256'])):
                 raise StorageFailure('attempt must start once then terminate once; retry requires new attempt ID')

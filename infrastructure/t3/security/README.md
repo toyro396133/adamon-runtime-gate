@@ -112,3 +112,40 @@ privileged Supervisor; no public HTTP enrollment or workflow is installed.
 מנפיק Bootstrap שולח uint32 באורך big-endian, JSON סגור עם certificate/binding/SPKI, ו־FD אחד עם מפתח 32 בתים אטום. מנגנון הנפקה מבוזר/attestation של guard ומארח GitHub מורשה עדיין דורש בדיקה. הרכבת Namespace רשת של Listener ו־Worker עדיין אינה ממומשת; namespace חדש ללא הגדרת רשת אינו proof ל־Runner מחובר.
 
 קשירת Session עודכנה לשמות permit בסכמה הקפואה: `repository_id`, ‏`workflow_path`, ‏`workflow_sha`, ‏`ref`, ‏`commit_sha`, ‏`step_sha256`, וכן `worker_job_guid`, ‏`worker_request_id`, ‏`plan_guid`. כולם נבדקים מול Assignment מנורמל; שדה חסר נכשל סגור. מזהה repository נבדק גם מתוך REST. תשעה permits חתומים עם tuple שגוי ו־Job/assignment digest נכונים נדחו לפני TLS; אלה ראיות לוגיקה/חתימות/ledger מקומיות ולא אישור GitHub חי.
+
+### סירוב לפני יצירת Worker — 2026-10-12
+
+Supervisor קורא כעת את זהות REST המלאה גם אחרי פענוח Assignment ולפני
+`spawn_worker`. שינוי workflow/ref/SHA או זהות מאגר נדחה לפני יצירת תהליך;
+בדיקה שלילית מאמתת שה־factory כלל לא נקרא. בבדיקות החוזרות לאחר ACK ובפתיחת
+Session נבדק גם check_run_id מול ה־Job הפעיל, ולא רק job_id/runner_id.
+אם הבעלים הצמיד workflow_blob_sha, יש אימות של אותה טביעת blob בכל correlation.
+זהו חיבור קוד שנבדק עם REST סינתטי; אין כאן ראיית הקצאת Job חיה מ־GitHub.
+
+כשל פענוח בערוץ המוגן מפעיל כעת revoke גם כאשר אין עדיין בקשה תקינה;
+בדיקת socketpair אמיתית שולחת frame באורך אפס ומוודאת סירוב ללא handler.
+שורש מפתחות הבעלים ב־Ledger הוא snapshot לקריאה בלבד: שינוי המפה המקורית
+לא מחליף signer לאחר ההתקנה. בדיקות REST הן סינתטיות במכוון; בדיקות תעבורה
+ושמירת מפתחות מקומיות אינן ראיית הרשאות Runner/LSM או צריכה בענן.
+
+### חיבור חתום לפריסה ול־bootstrap — מועמד תשתית
+
+`connect_deployed_supervisor` מאמת חתימת Deployment, תשעה image descriptors
+בלתי משתנים, executable נפרד לכל תהליך, UID/GID, VM assets ו־jail. הוא בודק
+ש־Listener הוא התהליך המוצמד ומחבר את המפענח, REST ו־NativeWorkerSpawner.
+כל birth בודק שוב פקיעת סמכות, בתים ותצורת factory. חסר ב־KVM/assets חוסם
+את הבנאי, ואינו מוחלף ב־boolean.
+
+`prepare_deployed_launcher_credential` דורש BirthOrder מסוג GUARDED ו־ProcessRecord
+זהה. הוא יוצר sealed key בלבד, כולל SPKI אמיתי בטביעת התעודה, ואז מציג לבעלים
+binding לחתימת permit. `deliver()` בודק permit במצב ISSUED עם כל tuple
+ה־Assignment, source/fixture, role/subject, SPKI ו־deployment, לפני SCM_RIGHTS.
+הקריאה אינה consume: ה־challenge של mTLS והצריכה האטומית נשארים ב־Session.
+ה־Session מאמת שוב את הפריסה. helper ה־bootstrap הוותיק נשאר לבדיקת wire
+ללא מחקר; הוא אינו נתיב פריסה מאושר.
+
+`deployment_sha256` הוא שדה קשירה **מועמד חדש לתשתית**, ולא שינוי בסכמת
+המחקר הקפואה. validator קפוא הדוחה אותו ממשיך לדחות. השימוש למחקר נשאר
+BLOCKED עד ביקורת ואישור נפרדים לסכמת הפריסה/permit. בדיקות הקוד המקומיות
+מוכיחות סירוב לחתימה חסרה, FD משתנה, birth ללא guard ו־permit שגוי/שנצרך;
+אין ראיה לפריסה privileged, להקצאת GitHub חיה או ל־bootstrap הזה עם KVM.

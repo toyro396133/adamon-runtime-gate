@@ -85,12 +85,19 @@ class SessionController:
         from .process import ProcessRecord
         if not isinstance(launcher,ProcessRecord):raise Denied('retained launcher required')
         self.supervisor,self.launcher,self.ledger=supervisor,launcher,ledger
-        self.permit_id,self.binding,self.request=permit_id,dict(binding),dict(request)
+        self.permit_id=permit_id
+        self._binding,self._request=canonical(binding),canonical(request)
         self.context,self.ca,self.oid,self.spki=context,ca,oid,expected_spki
         self.kill_job,self.preserve_partial=kill_job,preserve_partial
         self.challenges=Challenges()
         if self.binding.get('client_spki_sha256')!=expected_spki or self.binding.get('request_sha256')!=digest(self.request):
             raise Denied('trusted request/key binding required')
+    @property
+    def binding(self):
+        return decode(self._binding)
+    @property
+    def request(self):
+        return decode(self._request)
     def open(self, raw_socket):
         session=str(uuid.uuid4());conn=None
         try:
@@ -98,6 +105,9 @@ class SessionController:
             if dispatch is None or dispatch.revoked or not dispatch.acknowledged or not dispatch.authorized:
                 raise Denied('verified active assignment required')
             self.supervisor.correlate(dispatch.assignment)
+            if hasattr(self.supervisor,'deployment_spawner'):
+                from .supervisor import validate_deployed_subject_binding
+                validate_deployed_subject_binding(self.supervisor,self.launcher,self.binding,self.request)
             expected=assignment_binding(dispatch.assignment,dispatch.sha256)
             for key,value in expected.items():
                 if key not in self.binding or canonical(self.binding[key])!=canonical(value):

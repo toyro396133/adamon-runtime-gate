@@ -23,8 +23,9 @@ class S3EvidenceWriter:
         self.prefix = authority_sha256 + '/' + attempt_id + '/'
         self.context = base64.b64encode(canonical({'authority': authority_sha256, 'attempt': attempt_id})).decode()
         self.signer, self.key_id = signer, signer_key_id
-        self.retention_until = retention_until or datetime.now(timezone.utc) + timedelta(days=365)
-        if self.retention_until.tzinfo is None or self.retention_until < datetime.now(timezone.utc) + timedelta(days=364, hours=23):
+        now = datetime.now(timezone.utc)
+        self.retention_until = retention_until or now + timedelta(days=365)
+        if self.retention_until.tzinfo is None or self.retention_until < now + timedelta(days=365):
             raise StorageFailure('retention must be >=365 days; no shortened horizon')
         self.preflight_passed = False
 
@@ -129,13 +130,16 @@ class S3EvidenceWriter:
 
 class S3EvidenceReader:
     """Reviewer capability: get pinned versions only; no write/delete/lookup-latest."""
-    def __init__(self, client, *, bucket, authority_sha256, attempt_id, trusted_key, trusted_key_id):
+    def __init__(self, client, *, bucket, authority_sha256, attempt_id, trusted_key, trusted_key_id, kms_key_arn):
         from .evidence import HEX
-        if not HEX.fullmatch(authority_sha256) or not attempt_id.isalnum():
+        if (type(authority_sha256) is not str or not HEX.fullmatch(authority_sha256)
+            or type(attempt_id) is not str or not attempt_id.isalnum() or len(attempt_id)>64
+            or type(kms_key_arn) is not str or not kms_key_arn.startswith('arn:aws:kms:')):
             raise StorageFailure('unapproved namespace')
         self.client, self.bucket = client, bucket
         self.prefix = authority_sha256 + '/' + attempt_id + '/'
         self.key, self.key_id = trusted_key, trusted_key_id
+        self.kms = kms_key_arn
 
     def read(self, envelope: SealedEvidence, *, require_complete=True):
         envelope.verify(self.key, self.key_id)
@@ -145,6 +149,14 @@ class S3EvidenceReader:
             raise StorageFailure('partial evidence cannot qualify complete audit')
         reference = envelope.reference
         try:
+            head = self.client.head_object(Bucket=self.bucket, Key=self.prefix+reference.object_id, VersionId=reference.version_id)
+            retention = datetime.fromisoformat(envelope.retention_until)
+            if (retention.tzinfo is None or head.get('VersionId') != reference.version_id
+                or head.get('ContentLength') != reference.size_bytes
+                or head.get('ServerSideEncryption') != 'aws:kms' or head.get('SSEKMSKeyId') != self.kms
+                or head.get('ObjectLockMode') != 'COMPLIANCE'
+                or head.get('ObjectLockRetainUntilDate',datetime.min.replace(tzinfo=timezone.utc)) < retention):
+                raise StorageFailure('reviewer exact version/encryption/COMPLIANCE retention mismatch')
             result = self.client.get_object(Bucket=self.bucket, Key=self.prefix+reference.object_id, VersionId=reference.version_id)
             if result.get('VersionId') != reference.version_id:
                 raise StorageFailure('version mismatch')

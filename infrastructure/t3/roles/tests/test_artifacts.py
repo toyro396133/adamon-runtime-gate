@@ -15,9 +15,13 @@ from infrastructure.t3.roles.tests import test_receipts as receipt_fixtures
 def test_signed_producer_actual_artifact_audit_manifest(tmp_path):
     fixture=receipt_fixtures.Receipts();fixture.setUp()
     fixture.p['role']='LIFE';fixture.p['state']='SEALED_COMPLETE'
-    fixture.v.authority.keys[('LIFE','k')]=fixture.v.authority.keys[('AUDIT','k')]
-    fixture.v.authority.domains['LIFE']='SYNTHETIC'
-    fixture.v.authority.permit_bindings['p']['role']='LIFE'
+    from dataclasses import replace
+    from infrastructure.t3.roles.receipts import ReceiptVerifier
+    authority=fixture.v.authority
+    keys=dict(authority.keys);keys[('LIFE','k')]=keys[('AUDIT','k')]
+    domains=dict(authority.domains);domains['LIFE']='SYNTHETIC'
+    bindings={key:dict(value) for key,value in authority.permit_bindings.items()};bindings['p']['role']='LIFE'
+    fixture.v=ReceiptVerifier(replace(authority,keys=keys,domains=domains,permit_bindings=bindings))
     receipt=seal(fixture.p,'LIFE','SYNTHETIC',fixture.key)
     storage_key=Ed25519PrivateKey.generate();inv_key=Ed25519PrivateKey.generate()
     scope=scope_digest('a'*64,'attempt1')
