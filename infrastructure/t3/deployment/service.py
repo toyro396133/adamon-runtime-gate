@@ -24,7 +24,7 @@ from ..runtime.deployment import Deployment
 class OwnerDeploymentService:
     def __init__(self, *, native_factory, deployment_envelope, owner_public_key,
                  image_descriptors, repository, token_provider, approved_identity,
-                 credential_scope, evidence_scope, clock=time.time):
+                 credential_scope, evidence_scope, clock=time.time, network_scope=None):
         if not isinstance(native_factory, NativeProcessFactory):
             raise Denied('owner native factory required')
         if os.geteuid()!=0:raise Denied('privileged owner supervisor UID required')
@@ -35,6 +35,11 @@ class OwnerDeploymentService:
         if not callable(getattr(credential_scope,'revoke_all',None)) or not callable(getattr(evidence_scope,'preserve_partial',None)):
             raise Denied('owner credential/evidence capabilities required')
         self.factory=native_factory
+        self.network_scope=network_scope;self.network_bridge=None
+        if network_scope is not None:
+            from .network import OwnerNetworkScope
+            if not isinstance(network_scope,OwnerNetworkScope):raise Denied('owner network scope required')
+            self.factory.listener_network=network_scope.listener(self.deployment)
         self.credentials,self.evidence=credential_scope,evidence_scope
         self._configuration=dict(repository=repository,owner_token_provider=token_provider,
                                  approved_identity=approved_identity,
@@ -51,6 +56,10 @@ class OwnerDeploymentService:
             parent,child=socket.socketpair(socket.AF_UNIX,socket.SOCK_STREAM)
             try:
                 self.spawner.verify_configuration()
+                if self.network_scope is not None:
+                    from .network_proxy import NamespaceConnectBridge,GitHubConnectBroker,OwnerGitHubConnector
+                    self.network_bridge=NamespaceConnectBridge(self.network_scope.control_channel(),
+                        GitHubConnectBroker(OwnerGitHubConnector())).start()
                 record=self.factory.spawn('LISTENER',child.fileno())
                 self.supervisor=connect_deployed_supervisor(listener=record,
                     native_factory=self.factory,cleanup=self._cleanup,
@@ -72,6 +81,13 @@ class OwnerDeploymentService:
             except BaseException as exc:errors.append(exc)
             try:self.factory.revoke_owned(self.evidence.preserve_partial,reason)
             except BaseException as exc:errors.append(exc)
+            if getattr(self,'network_bridge',None) is not None:
+                try:self.network_bridge.close()
+                except BaseException as exc:errors.append(exc)
+                self.network_bridge=None
+            if getattr(self,'network_scope',None) is not None:
+                try:self.network_scope.close()
+                except BaseException as exc:errors.append(exc)
             if self.channel is not None:
                 try:self.channel.shutdown(socket.SHUT_RDWR)
                 except OSError:pass

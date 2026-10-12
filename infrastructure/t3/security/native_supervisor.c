@@ -110,8 +110,14 @@ static int spawn_internal(int exe_fd,int job_cgroup_fd,uid_t uid,gid_t gid,
   char *listener_argv[]={"Runner.Listener","run","--ephemeral",NULL};
   char *worker_argv[]={"Runner.Worker","spawnclient", "196", "197", NULL};
   char *launcher_argv[]={"p4-pinned-launcher",NULL};
-  char **argv=role==1?listener_argv:role==2?worker_argv:launcher_argv;char *env[]={NULL};
-  syscall(SYS_execveat,exe_fd,"",argv,env,AT_EMPTY_PATH);
+  char **argv=role==1?listener_argv:role==2?worker_argv:launcher_argv;
+  char *empty_env[]={NULL};
+  /* Only the Owner-created Listener namespace has a loopback CONNECT broker.
+     Worker/Launcher never inherit proxy settings or the Owner host network. */
+  char *listener_env[]={"HTTPS_PROXY=http://127.0.0.1:18443",
+    "https_proxy=http://127.0.0.1:18443","NO_PROXY=","no_proxy=",NULL};
+  syscall(SYS_execveat,exe_fd,"",argv,
+    role==1&&listener_net_fd>=0?listener_env:empty_env,AT_EMPTY_PATH);
  fail: {int e=errno;write(err[1],&e,sizeof(e));_exit(127);}
  }
  close(sync[0]);close(err[1]);*out=(struct p4_child){pid,pidfd,sync[1],err[0]};return 0;
