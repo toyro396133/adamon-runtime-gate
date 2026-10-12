@@ -30,6 +30,7 @@ def create(context):
     for files in fingerprints.values():
         if type(files) is not dict or not files:raise ValueError('empty source fingerprint map')
         for name,value in files.items():
+            if type(name) is not str:raise ValueError('closed source fingerprint entry required')
             path=Path(name)
             if (type(name) is not str or not name.startswith('infrastructure/t3/')
                 or path.is_absolute() or '..' in path.parts

@@ -4,8 +4,19 @@ import hashlib
 import json
 import pathlib
 import tempfile
+import struct
 import unittest
 from infrastructure.t3.runner.build_bundle import dependency_closure, verify_build_receipt
+
+def synthetic_managed_pe():
+    # Deliberately synthetic structural fixture, never full Runner build evidence.
+    raw=bytearray(1024);raw[:2]=b'MZ';struct.pack_into('<I',raw,60,128)
+    raw[128:132]=b'PE\0\0';struct.pack_into('<H',raw,134,1)
+    struct.pack_into('<H',raw,148,224);struct.pack_into('<H',raw,152,0x10b)
+    struct.pack_into('<I',raw,244,16);struct.pack_into('<II',raw,360,0x2000,72)
+    struct.pack_into('<IIII',raw,384,512,0x2000,512,512)
+    struct.pack_into('<I',raw,512,72);struct.pack_into('<II',raw,520,0x2050,32)
+    raw[592:596]=b'BSJB';return bytes(raw)
 
 class BuildBundleTests(unittest.TestCase):
     def setUp(self):
@@ -46,8 +57,8 @@ class BuildBundleTests(unittest.TestCase):
             return dict(relative=name,sha256=hashlib.sha256(raw).hexdigest(),size_bytes=len(raw))
         receipt=dict(version=1,bundle_sha256=hashlib.sha256(json.dumps(bundle,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
             phases={p:dict(argv=['dotnet',p],exit_code=0,log=ref(p+'.log',b'original test log')) for p in ('restore','build','tests')},
-            outputs={p:ref(p,b'MZsynthetic-pe') for p in ('Runner.Listener.dll','Runner.Worker.dll')},
-            trx=ref('tests.trx',b'<TestRun><ResultSummary><Counters total="1" executed="1" passed="1"/></ResultSummary></TestRun>'))
+            outputs={p:ref(p,synthetic_managed_pe()) for p in ('Runner.Listener.dll','Runner.Worker.dll')},
+            trx=ref('tests.trx',b'<TestRun><ResultSummary><Counters total="1" executed="1" passed="1"/></ResultSummary><Results><UnitTestResult executionId="synthetic-1" outcome="Passed"/></Results></TestRun>'))
         return bundle,receipt
     def test_synthetic_receipt_validation_is_not_full_build(self):
         bundle,receipt=self.receipt_fixture();result=verify_build_receipt(bundle,receipt,self.root)
@@ -60,9 +71,23 @@ class BuildBundleTests(unittest.TestCase):
     def test_missing_worker_output(self):
         bundle,receipt=self.receipt_fixture();verify_build_receipt(bundle,receipt,self.root);del receipt['outputs']['Runner.Worker.dll']
         with self.assertRaisesRegex(ValueError,'BUILD_OUTPUT_MISSING'): verify_build_receipt(bundle,receipt,self.root)
+    def test_mz_prefix_is_not_a_managed_assembly(self):
+        bundle,receipt=self.receipt_fixture();verify_build_receipt(bundle,receipt,self.root)
+        raw=b'MZsynthetic-pe';name='Runner.Worker.dll'
+        (self.root/name).write_bytes(raw)
+        receipt['outputs'][name].update(sha256=hashlib.sha256(raw).hexdigest(),size_bytes=len(raw))
+        with self.assertRaisesRegex(ValueError,'BUILD_OUTPUT_NOT_MANAGED_PE'):
+            verify_build_receipt(bundle,receipt,self.root)
+    def test_result_outcome_must_match_success_counter(self):
+        bundle,receipt=self.receipt_fixture();verify_build_receipt(bundle,receipt,self.root)
+        raw=(self.root/'tests.trx').read_bytes().replace(b'outcome="Passed"',b'outcome="Failed"')
+        (self.root/'tests.trx').write_bytes(raw)
+        receipt['trx'].update(sha256=hashlib.sha256(raw).hexdigest(),size_bytes=len(raw))
+        with self.assertRaisesRegex(ValueError,'BUILD_TEST_RESULTS_INCONSISTENT'):
+            verify_build_receipt(bundle,receipt,self.root)
     def test_trx_skips_not_success(self):
         bundle,receipt=self.receipt_fixture();verify_build_receipt(bundle,receipt,self.root)
-        raw=b'<TestRun><ResultSummary><Counters total="2" executed="1" passed="1"/></ResultSummary></TestRun>'
+        raw=b'<TestRun><ResultSummary><Counters total="2" executed="1" passed="1"/></ResultSummary><Results><UnitTestResult executionId="synthetic-1" outcome="Passed"/></Results></TestRun>'
         (self.root/'tests.trx').write_bytes(raw);receipt['trx'].update(sha256=hashlib.sha256(raw).hexdigest(),size_bytes=len(raw))
         with self.assertRaisesRegex(ValueError,'BUILD_TESTS_INCOMPLETE'): verify_build_receipt(bundle,receipt,self.root)
 

@@ -10,6 +10,7 @@ import json
 import pathlib
 import re
 import subprocess
+import struct
 import xml.etree.ElementTree as ET
 from .build_graph import BASE, inspect
 
@@ -18,6 +19,42 @@ NAME = re.compile(r'[A-Za-z0-9_.-]+$')
 
 def digest(path):
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+
+def validate_managed_pe(raw):
+    """Structural validation only; neither a build nor code provenance proof."""
+    try:
+        if raw[:2]!=b'MZ' or len(raw)<64: raise ValueError
+        pe=struct.unpack_from('<I',raw,60)[0]
+        if raw[pe:pe+4]!=b'PE\0\0': raise ValueError
+        sections=struct.unpack_from('<H',raw,pe+6)[0]
+        optional_size=struct.unpack_from('<H',raw,pe+20)[0]
+        optional=pe+24
+        magic=struct.unpack_from('<H',raw,optional)[0]
+        directory_offset={0x10b:96,0x20b:112}[magic]
+        if optional_size<directory_offset+15*8 or not 0<sections<=96: raise ValueError
+        count=struct.unpack_from('<I',raw,optional+directory_offset-4)[0]
+        if count<15: raise ValueError
+        cli_rva,cli_size=struct.unpack_from('<II',raw,optional+directory_offset+14*8)
+        if cli_size<72: raise ValueError
+        def mapped(rva,size):
+            matches=[]
+            for index in range(sections):
+                offset=optional+optional_size+index*40
+                _,start,length,position=struct.unpack_from('<IIII',raw,offset+8)
+                if start<=rva and rva+size<=start+length:
+                    at=position+rva-start
+                    if at+size>len(raw): raise ValueError
+                    matches.append(at)
+            if len(matches)!=1: raise ValueError
+            return matches[0]
+        cli=mapped(cli_rva,cli_size)
+        if struct.unpack_from('<I',raw,cli)[0]<72: raise ValueError
+        metadata_rva,metadata_size=struct.unpack_from('<II',raw,cli+8)
+        if metadata_size<20: raise ValueError
+        metadata=mapped(metadata_rva,metadata_size)
+        if raw[metadata:metadata+4]!=b'BSJB': raise ValueError
+    except (ValueError,KeyError,struct.error):
+        raise ValueError('BUILD_OUTPUT_NOT_MANAGED_PE') from None
 
 def dependency_closure(checkout, feed):
     """Validate all nine upstream project lockfiles and byte-pinned local feed."""
@@ -115,7 +152,7 @@ def verify_build_receipt(bundle, receipt, evidence_root):
         if not read(phase['log']): raise ValueError('BUILD_LOG_EMPTY')
     if set(receipt['outputs'])!={'Runner.Listener.dll','Runner.Worker.dll'}: raise ValueError('BUILD_OUTPUT_MISSING')
     for ref in receipt['outputs'].values():
-        if not read(ref).startswith(b'MZ'): raise ValueError('BUILD_OUTPUT_NOT_PE')
+        validate_managed_pe(read(ref))
     trx=ET.fromstring(read(receipt['trx']))
     counter_nodes=trx.findall('.//{*}Counters')
     if len(counter_nodes)!=1: raise ValueError('BUILD_TEST_RESULTS_MISSING')
@@ -127,6 +164,10 @@ def verify_build_receipt(bundle, receipt, evidence_root):
         try: value=int(counters.attrib.get(name,'0'))
         except ValueError: raise ValueError('BUILD_TESTS_INCOMPLETE') from None
         if value!=0: raise ValueError('BUILD_TESTS_INCOMPLETE')
+    results=trx.findall('.//{*}UnitTestResult')
+    identifiers=[result.attrib.get('executionId') for result in results]
+    if len(results)!=total or any(result.attrib.get('outcome')!='Passed' for result in results) or any(not value for value in identifiers) or len(set(identifiers))!=total:
+        raise ValueError('BUILD_TEST_RESULTS_INCONSISTENT')
     return dict(status='OWNER_BUILD_OUTPUTS_VALIDATED_PENDING_INDEPENDENT_REVIEW',tests_passed=passed,
         execution_authorized=False,research_executed=False)
 
