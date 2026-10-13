@@ -143,3 +143,35 @@ class LocalEncryptedStore:
         if sha(data) != envelope.reference.sha256 or len(data) != envelope.reference.size_bytes:
             raise StorageFailure('source hash/size mismatch')
         return data
+
+    def put_exact(self, data: bytes, state='SEALED_COMPLETE') -> SealedEvidence:
+        """Atomically reuse an authenticated exact version, never upgrade state.
+
+        This local-only primitive recovers interrupted inventory publication.
+        It does not change put's create-only contract or qualify Object Lock.
+        """
+        if type(data) is not bytes or state not in ('SEALED_COMPLETE','SEALED_PARTIAL','CRASH_INCOMPLETE'):
+            raise StorageFailure('exact byte/state contract')
+        object_id=sha(data)
+        with self._connect() as con:
+            con.execute('BEGIN IMMEDIATE')
+            row=con.execute('SELECT nonce,ciphertext,receipt FROM versions WHERE object_id=?',(object_id,)).fetchone()
+            if row is not None:
+                p=json.loads(row[2])
+                if set(p)!={'version','reference','state','retention_until','signer_key_id','signature','storage_scope_sha256'} or p['version']!=1:
+                    raise StorageFailure('exact reuse receipt shape')
+                envelope=SealedEvidence(EvidenceRef(**p['reference']),p['state'],p['retention_until'],p['signer_key_id'],p['signature'],p['storage_scope_sha256'])
+                envelope.verify(self.public_key,self.key_id)
+                if envelope.state!=state or envelope.storage_scope_sha256!=self.storage_scope_sha256:
+                    raise StorageFailure('exact reuse state/scope mismatch')
+                try:original=self.aead.decrypt(row[0],row[1],canonical(envelope.payload()))
+                except Exception as exc:raise StorageFailure('exact reuse encryption integrity') from exc
+                if original!=data or envelope.reference.sha256!=object_id or envelope.reference.size_bytes!=len(data):
+                    raise StorageFailure('exact reuse original mismatch')
+                return envelope
+            ref=EvidenceRef(object_id,str(uuid.uuid4()),object_id,len(data))
+            envelope=signed(ref,state,(datetime.now(timezone.utc)+timedelta(days=365)).isoformat(),self.key_id,self.signer,self.storage_scope_sha256)
+            nonce=os.urandom(12)
+            con.execute('INSERT INTO versions VALUES(?,?,?,?,?)',(object_id,ref.version_id,nonce,self.aead.encrypt(nonce,data,canonical(envelope.payload())),canonical({**envelope.payload(),'signature':envelope.signature})))
+        if self.read(envelope)!=data:raise StorageFailure('exact reuse readback failed')
+        return envelope

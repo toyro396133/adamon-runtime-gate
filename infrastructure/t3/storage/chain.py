@@ -24,7 +24,10 @@ class InventoryProducer:
         if not artifacts:raise StorageFailure('empty artifacts')
         members={}
         for label,data in artifacts.items():
-            member=self.store.put(data,state=state)
+            # Explicit local recovery primitive; production stores retain their
+            # existing versioned create-only implementation.
+            put=getattr(self.store,'put_exact',self.store.put)
+            member=put(data,state=state)
             member.verify(self.member_key,self.member_key_id)
             if member.storage_scope_sha256!=self.scope:raise StorageFailure('storage attempt mismatch; preserve sealed source')
             members[label]=member
@@ -42,12 +45,20 @@ class SignedInventoryReader:
     def __init__(self, store, inventory, *, inventory_sha256, required_labels,
                  scope_sha256, inventory_key, inventory_key_id, member_key, member_key_id):
         if sha(canonical(inventory))!=inventory_sha256:raise StorageFailure('inventory receipt digest mismatch')
+        self.inventory_sha256=inventory_sha256
         members=verify_inventory(inventory,public_key=inventory_key,key_id=inventory_key_id,
             required_labels=required_labels,trusted_member_key=member_key,trusted_member_key_id=member_key_id)
         if any(m.storage_scope_sha256!=scope_sha256 for m in members.values()):raise StorageFailure('cross-attempt inventory')
         self._store=store; self._members=members
-        self._references={(m.reference.object_id,m.reference.version_id):m for m in members.values()}
-        if len(self._references)!=len(members):raise StorageFailure('duplicate artifact byte reference')
+        self._references={}
+        for member in members.values():
+            identity=(member.reference.object_id,member.reference.version_id)
+            old=self._references.get(identity)
+            # Before/after an idempotent operation legitimately have identical
+            # bytes. Reuse only the exact signed envelope; contradictory alias
+            # metadata must never replace the first authenticated capability.
+            if old is not None and old!=member:raise StorageFailure('contradictory artifact byte reference')
+            self._references.setdefault(identity,member)
     def read_member(self,label):
         if label not in self._members:raise StorageFailure('unregistered member')
         member=self._members[label]

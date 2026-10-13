@@ -26,7 +26,8 @@ def sealed(tmp_path,result,labels=None):
     store=LocalEncryptedStore(tmp_path/'encrypted.sqlite',os.urandom(32),member,'member',storage_scope_sha256=scope)
     labels={'micro_authority','micro_result'} if labels is None else labels
     producer=InventoryProducer(store,required_labels=labels,scope_sha256=scope,signer=signer,key_id='inventory',member_key=member.public_key(),member_key_id='member')
-    data={'micro_authority':authority_bytes(DIRECT),'micro_result':json.dumps(result,allow_nan=False).encode()}
+    from infrastructure.t3.capture_encoding import encode
+    data={'micro_authority':authority_bytes(DIRECT),'micro_result':encode(result)}
     inventory=producer.seal({key:data[key] for key in labels})
     def reader(inv=inventory):
         return SignedInventoryReader(store,inv,inventory_sha256=sha(canonical(inv)),required_labels=labels,scope_sha256=scope,inventory_key=signer.public_key(),inventory_key_id='inventory',member_key=member.public_key(),member_key_id='member')

@@ -33,6 +33,17 @@ class OperationSpec:
 class OperationProducer:
     def __init__(self,*,inventory_producer,specs,producer_identity,signer,ledger):
         if not isinstance(inventory_producer,InventoryProducer):raise StorageFailure('existing inventory producer required')
+        # Repeated byte-identical controls also occur on real S3. Persist only
+        # signed exact-version receipts, with fresh version readback on reuse.
+        from .s3_protected import ProtectedS3EvidenceWriter
+        if isinstance(inventory_producer.store,ProtectedS3EvidenceWriter):
+            from .s3 import S3EvidenceReader
+            from .journal import JournaledS3Store
+            writer=inventory_producer.store
+            authority,attempt,_=writer.prefix.split('/')
+            reader=S3EvidenceReader(writer.client,bucket=writer.bucket,authority_sha256=authority,attempt_id=attempt,
+                trusted_key=writer.signer.public_key(),trusted_key_id=writer.key_id,kms_key_arn=writer.kms)
+            inventory_producer.store=JournaledS3Store(writer,reader,ledger=str(ledger)+'.members')
         if type(specs) is not dict or not specs or any(not isinstance(v,OperationSpec) for v in specs.values()):raise StorageFailure('closed operation registry')
         self.producer=inventory_producer;self.specs=MappingProxyType(dict(specs));self.identity=json.loads(canonical(binding(producer_identity)))
         self.signer=signer;self.ledger=ledger
