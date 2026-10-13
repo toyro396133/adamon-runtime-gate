@@ -1,0 +1,14 @@
+{
+  "status": "T3_INFRASTRUCTURE_IMPLEMENTATION_PARTIAL",
+  "python_tests_passed": 136,
+  "subtests_passed": 4,
+  "csharp_transport_tests_passed": 7,
+  "csharp_scope": "real AF_UNIX/SCM_RIGHTS; upstream type doubles; not full runner build",
+  "native_scope": "compiled C; sealed memfd and negative checks; privileged spawn unverified",
+  "runtime_security_verified": false,
+  "research_executed": false,
+  "workflow_installed": false,
+  "full_runner_build": "BLOCKED_ENOSPC",
+  "storage_scope": "local crypto and SDK contract tests; no live AWS verification",
+  "execution_authorized": false
+}

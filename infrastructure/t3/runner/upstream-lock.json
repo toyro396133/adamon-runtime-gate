@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "repository": "https://github.com/actions/runner.git",
+  "commit": "197ca027b90de199464dee3bb9ff198a1db60967",
+  "tag": "v2.338.0",
+  "sdk": "8.0.425",
+  "original_sources": {
+    "src/Runner.Listener/JobDispatcher.cs": "606ce3b5ec955a14dae3508bb335b69b0b805fe62f6b30771728ffb178f38088",
+    "src/Runner.Worker/Worker.cs": "4938edab9171c4f63d60af30df7b8716b25068b02354ee6d9c840a5b24ed9309",
+    "src/Runner.Worker/JobRunner.cs": "006421e85af890f4ac2192d494992582ca155bfa8996ff94b87d3e152638d6e3",
+    "src/Runner.Worker/StepsRunner.cs": "7f89529ca548e704db0e6dc97df1a2d291c0db85ad18701d17db59330861ca6c"
+  }
+}

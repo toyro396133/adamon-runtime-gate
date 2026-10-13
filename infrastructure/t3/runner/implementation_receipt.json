@@ -1,0 +1,65 @@
+{
+  "actual_checks": {
+    "bridge_CSharp_compile": "PASS_WITH_CS1701_REFERENCE_WARNING",
+    "fresh_pinned_checkout_apply": "PASS",
+    "pinned_source_accessibility_review": "FIXED_SDK_INTERNAL_MAPPING_COUNT_USE_PUBLIC_ENUMERATOR",
+    "pre_masker_json_errors": "SANITIZED_WITHOUT_RAW_FRAGMENT_OR_INNER_EXCEPTION",
+    "real_Unix_stream_and_SCM_RIGHTS_tests": {
+      "failed": 0,
+      "passed": 8,
+      "scope": "real compiled bridge transport and pre-masker sanitization; upstream types remain test doubles"
+    },
+    "wire_normalization_tests": {
+      "passed": 13,
+      "scope": "pinned source derived fixtures, not live assignment authentication"
+    }
+  },
+  "assignment_wire_authority": {
+    "job_identity": "orchestration GUID and Checks ID remain separate; REST lookup required",
+    "live_github_assignment_verified": false,
+    "serializer": "VssJsonMediaTypeFormatter camelCase, JsonUtility.cs:255",
+    "step_digest": "SHA256(security.protocol.canonical(entire decoded actual step)); prospective infrastructure encoding, not original raw substring"
+  },
+  "dotnet_host_sha256": "7dda7a639bc35fba05c40d308b0296450aa4e628d109245a6312c385da9b0931",
+  "dotnet_sdk": "8.0.425",
+  "execution_authorized": false,
+  "fork_repository_created": false,
+  "full_build_environment": {
+    "historical_data_deleted": false,
+    "tmp_free_df_h": "81M",
+    "workspace_free_df_h": "284M"
+  },
+  "full_build_followup": "BLOCKED_NETSDK1004_MISSING_ASSETS_NO_RESTORE",
+  "full_fork_build": "BLOCKED_NUGET_RESTORE_ENOSPC_BEFORE_COMPILER",
+  "full_fork_build_attempts": 3,
+  "inspected_upstream_interfaces_sha256": {
+    "src/Runner.Worker/JobContext.cs": "b20d9bfeebbb06c4cd7bb8433b4208a237e751542310c8bec2e155325317deac",
+    "src/Sdk/DTObjectTemplating/ObjectTemplating/Tokens/MappingToken.cs": "2e80736fe895532f282a98bc6bf3bfa7a1a299e2015995f113fea4404c4bb5ab",
+    "src/Sdk/DTObjectTemplating/ObjectTemplating/Tokens/TemplateTokenJsonConverter.cs": "7da743cbfc6a5fae39b970c6ffdf266138381f282610e63f919f6e37643cd2da",
+    "src/Sdk/DTPipelines/Pipelines/ContextData/PipelineContextDataJsonConverter.cs": "c709407b84e95dd1f00043523a048349b720cf8b6ad7788e930ed0b7ed76d2d5",
+    "src/Sdk/InternalsVisibleTo.cs": "17fc1e866cee6b32d9c1f60d528403c15629823bc335324891d799d1a52d2942",
+    "src/Sdk/WebApi/WebApi/JsonUtility.cs": "eaa154b6f92ad980862ba0a700ca56e4f3b7e87fdc3d3075d61c2648c3392a5e",
+    "src/Sdk/WebApi/WebApi/VssCamelCasePropertyNamesContractResolver.cs": "c467aae6608a8fd13cec0d3cafa657f95269d8d9ab297d66316d53be6a019a75",
+    "src/Sdk/WebApi/WebApi/VssJsonMediaTypeFormatter.cs": "a8f98189b84aa0dd85f3ca5a8bd16b860f888bd1412ee38f5ab50925a98519cf"
+  },
+  "kind": "SOURCE_PINNED_PATCH_BUILD_RECEIPT",
+  "license_sha256": "621a1e0b6163b9d63fe780b9d6f5a7f775a5781065024a1ebf8010726c44cec1",
+  "patch_sha256": "0d34cced9e9ebfbd334d744812dc052e95df96ba04ccc3b0195276ad2242331d",
+  "patched_source_sha256": {
+    "src/Runner.Common/P4ProtectedBridge.cs": "b28a308a82ba0e8336e11d06f0f856c23b4e15b75613daaef2862f3bd0b4fe7d",
+    "src/Runner.Listener/JobDispatcher.cs": "45ceb7136940a91333bc7925f06e4db1add5eaabc54d26c8b68a5fc20803f755",
+    "src/Runner.Worker/JobRunner.cs": "46391826dad5639840a79a75f587d23fa720376f2b58bd1c2ab865b12ddec948",
+    "src/Runner.Worker/StepsRunner.cs": "bbbc6ea42efe8ec662632fdbfb1b0af380c1b41d112eeab429395c20ffa98969",
+    "src/Runner.Worker/Worker.cs": "9ae33af765be39fb5c80c1407946d99c9acb2b9a480afa2f9e41d962f0f2df02"
+  },
+  "patched_source_tree_oid": "dd76b7e1054d1e4070b1024ec27466474154500e",
+  "privileged_spawn_isolation": "UNVERIFIED",
+  "publication": "patch bundle in runtime-gate implementation branch; no additional remote fork required",
+  "registration_broker_legacy": "UNVERIFIED",
+  "research_executed": false,
+  "sdk_archive_sha512_verified": "934b8060a7190e5909ad1fd0785db542f487b3bbf6cdd14826b02095fdd0d0394298b1634085eff302928fccc33f7c1a7253e9b87df555fc36fce819bcd2e798",
+  "source_tree_oid": "6ff195e6613abfd22664e4ae7b847680d5e0c42d",
+  "test_scope": "actual bridge source compiled against explicitly named upstream-shape test doubles; not complete Runner fork",
+  "upstream_commit": "197ca027b90de199464dee3bb9ff198a1db60967",
+  "upstream_tag": "v2.338.0"
+}

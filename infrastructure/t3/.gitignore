@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.sqlite*
+*.db
+*.db-*
+*.pem
+*.key
+bin/
+obj/
+native_supervisor

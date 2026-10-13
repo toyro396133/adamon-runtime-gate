@@ -1,0 +1,15 @@
+{
+  "errors": 0,
+  "execution_authorized": false,
+  "failures": 0,
+  "remote_object_lock_kms_iam_reviewer_canaries": "UNVERIFIED",
+  "research_executed": false,
+  "source_sha256": {
+    "README.md": "034b611dac5f845502c6900ebfe7886fe1cbc2574328ac47e59c6fe865dc4393",
+    "check.py": "c3e0ba5ba656943843ffcef231cd81b109e0b07b89e0b7e1f7ebfa5a1ad8ab63",
+    "nonresearch.yml.template": "24ffc7df420a98e489187e277086671b9bb8c25e8f137dd41f78d1a662cb9b90",
+    "tests/test_preflight.py": "19a47f7ae16d5e644fc3c8e1ad6d5f243ace8882d9f98f3377aa48689466a0d2"
+  },
+  "status": "SYNTHETIC_TESTS_PASS_NOT_REMOTE_SERVICE_PROOF",
+  "tests_run": 4
+}

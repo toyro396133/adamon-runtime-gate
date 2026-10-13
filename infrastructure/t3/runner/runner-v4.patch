@@ -1,0 +1,182 @@
+--- a/src/Runner.Listener/JobDispatcher.cs
++++ b/src/Runner.Listener/JobDispatcher.cs
+@@ -438,55 +438,10 @@
+                                 ArgUtil.NotNullOrEmpty(pipeHandleOut, nameof(pipeHandleOut));
+                                 ArgUtil.NotNullOrEmpty(pipeHandleIn, nameof(pipeHandleIn));
+ 
+-                                // Save STDOUT from worker, worker will use STDOUT report unhandle exception.
+-                                processInvoker.OutputDataReceived += delegate (object sender, ProcessDataReceivedEventArgs stdout)
+-                                    {
+-                                        if (!string.IsNullOrEmpty(stdout.Data))
+-                                        {
+-                                            lock (_outputLock)
+-                                            {
+-                                                if (!stdout.Data.StartsWith("[WORKER"))
+-                                                {
+-                                                    workerOutput.Add(stdout.Data);
+-                                                }
+-
+-                                                if (printToStdout)
+-                                                {
+-                                                    term.WriteLine(stdout.Data, skipTracing: true);
+-                                                }
+-                                            }
+-                                        }
+-                                    };
+-
+-                                // Save STDERR from worker, worker will use STDERR on crash.
+-                                processInvoker.ErrorDataReceived += delegate (object sender, ProcessDataReceivedEventArgs stderr)
+-                                    {
+-                                        if (!string.IsNullOrEmpty(stderr.Data))
+-                                        {
+-                                            lock (_outputLock)
+-                                            {
+-                                                workerOutput.Add(stderr.Data);
+-                                            }
+-                                        }
+-                                    };
+-
+-                                // Start the child process.
+-                                HostContext.WritePerfCounter("StartingWorkerProcess");
+-                                var assemblyDirectory = HostContext.GetDirectory(WellKnownDirectory.Bin);
+-                                string workerFileName = Path.Combine(assemblyDirectory, _workerProcessName);
+-                                workerProcessTask = processInvoker.ExecuteAsync(
+-                                    workingDirectory: assemblyDirectory,
+-                                    fileName: workerFileName,
+-                                    arguments: "spawnclient " + pipeHandleOut + " " + pipeHandleIn,
+-                                    environment: null,
+-                                    requireExitCodeZero: false,
+-                                    outputEncoding: null,
+-                                    killProcessOnCancel: true,
+-                                    redirectStandardIn: null,
+-                                    inheritConsoleHandler: false,
+-                                    keepStandardInOpen: false,
+-                                    highPriorityProcess: true,
+-                                    cancellationToken: workerProcessCancelTokenSource.Token);
++                                // P4: no local ProcessInvoker fallback and no Worker stdout forwarding.
++                                workerProcessTask = P4ProtectedBridge.SpawnWorkerAsync(
++                                    JsonUtility.ToString(message), pipeHandleOut, pipeHandleIn,
++                                    workerProcessCancelTokenSource.Token);
+                             });
+ 
+                         // Send the job request message.
+@@ -500,7 +455,7 @@
+                             {
+                                 await processChannel.SendAsync(
+                                     messageType: MessageType.NewJobRequest,
+-                                    body: JsonUtility.ToString(message),
++                                    body: P4ProtectedBridge.ListenerAssignment,
+                                     cancellationToken: csSendJobRequest.Token);
+                             }
+                         }
+@@ -722,6 +677,7 @@
+             }
+             finally
+             {
++                P4ProtectedBridge.RevokeListener();
+                 Busy = false;
+ 
+                 if (JobStatus != null)
+--- a/src/Runner.Worker/Worker.cs
++++ b/src/Runner.Worker/Worker.cs
+@@ -71,16 +71,12 @@
+                     {
+                         jobMessage = StringUtil.ConvertFromJson<Pipelines.AgentJobRequestMessage>(channelMessage.Body);
+                     }
+-                    catch (JsonReaderException ex)
+-                    {
+-                        if (channelMessage.Body.Length > ex.LinePosition + 10)
+-                        {
+-                            var errorChunk = channelMessage.Body.Substring(ex.LinePosition - 10, 20);
+-                            terminal.WriteError($"Worker received invalid Json at position '{ex.LinePosition}': {errorChunk} ({Convert.ToBase64String(Encoding.UTF8.GetBytes(errorChunk))})");
+-                        }
+-
+-                        throw;
+-                    }
++                    catch (JsonException)
++                    {
++                        // Never leak a raw assignment fragment through exceptions or public logs.
++                        throw new InvalidOperationException("P4_INVALID_ASSIGNMENT_JSON");
++                    }
++                    await P4ProtectedBridge.AcknowledgeWorkerAsync(channelMessage.Body);
+ 
+                     ArgUtil.NotNull(jobMessage, nameof(jobMessage));
+                     HostContext.WritePerfCounter($"WorkerJobMessageReceived_{jobMessage.RequestId.ToString()}");
+@@ -98,7 +94,7 @@
+                     SetCulture(jobMessage);
+ 
+                     // Start the job.
+-                    Trace.Info($"Job message:{Environment.NewLine} {StringUtil.ConvertToJson(jobMessage)}");
++                    Trace.Info("P4_ASSIGNMENT_ACKNOWLEDGED");
+                     Task<TaskResult> jobRunnerTask = jobRunner.RunAsync(jobMessage, jobRequestCancellationToken.Token);
+ 
+                     // Start listening for a cancel message from the channel.
+@@ -117,6 +113,7 @@
+                     }
+ 
+                     // Otherwise a cancel message was received from the channel.
++                    P4ProtectedBridge.RevokeWorker("cancel");
+                     Trace.Info("Cancellation/Shutdown message received.");
+                     channelMessage = await channelTask;
+                     switch (channelMessage.MessageType)
+@@ -140,6 +137,7 @@
+             }
+             finally
+             {
++                P4ProtectedBridge.RevokeWorker("worker_exit");
+                 HostContext.Unloading -= Worker_Unloading;
+                 _completedCommand.Set();
+             }
+--- a/src/Runner.Worker/JobRunner.cs
++++ b/src/Runner.Worker/JobRunner.cs
+@@ -41,7 +41,8 @@
+             ArgUtil.NotNull(message.Resources, nameof(message.Resources));
+             ArgUtil.NotNull(message.Variables, nameof(message.Variables));
+             ArgUtil.NotNull(message.Steps, nameof(message.Steps));
+-            Trace.Info("Job ID {0}", message.JobId);
++            await P4ProtectedBridge.AuthorizeAssignmentAsync(JsonUtility.ToString(message));
++            Trace.Info("P4_ASSIGNMENT_AUTHORIZED");
+ 
+             DateTime jobStartTimeUtc = DateTime.UtcNow;
+             _runnerSettings = HostContext.GetService<IConfigurationStore>().GetSettings();
+@@ -187,7 +188,15 @@
+                 try
+                 {
+                     Trace.Info("Initialize job. Getting all job steps.");
+-                    jobSteps = await jobExtension.InitializeJob(jobContext, message);
++                    // Protected single-step construction: never call upstream hook/action setup.
++                    var approved = (GitHub.DistributedTask.Pipelines.ActionStep)message.Steps[0];
++                    var fixedRunner = HostContext.CreateService<IActionRunner>();
++                    fixedRunner.Action = approved;
++                    fixedRunner.Stage = ActionRunStage.Main;
++                    fixedRunner.ExecutionContext = jobContext.CreateChild(approved.Id,
++                        "P4 protected execution", approved.Name, null, approved.ContextName,
++                        ActionRunStage.Main);
++                    jobSteps = new List<IStep> { fixedRunner };
+                 }
+                 catch (OperationCanceledException ex) when (jobContext.CancellationToken.IsCancellationRequested)
+                 {
+@@ -251,7 +260,7 @@
+                 finally
+                 {
+                     Trace.Info("Finalize job.");
+-                    await jobExtension.FinalizeJob(jobContext, message, jobStartTimeUtc);
++                    P4ProtectedBridge.RevokeWorker("job_complete"); // no post-job hooks
+                 }
+ 
+                 Trace.Info($"Job result after all job steps finish: {jobContext.Result ?? TaskResult.Succeeded}");
+--- a/src/Runner.Worker/StepsRunner.cs
++++ b/src/Runner.Worker/StepsRunner.cs
+@@ -317,7 +317,11 @@
+ 
+             try
+             {
+-                await step.RunAsync();
++                // No ordinary action handler, shell, hook or fallback can execute here.
++                if (step is not IActionRunner action || action.Stage != ActionRunStage.Main)
++                    throw new InvalidOperationException("P4_UNAUTHORIZED_STEP");
++                await P4ProtectedBridge.ExecuteFixedStepAsync(action.Action.Id.ToString(),
++                    step.ExecutionContext.CancellationToken);
+             }
+             catch (OperationCanceledException ex)
+             {

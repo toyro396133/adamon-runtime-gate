@@ -1,0 +1,31 @@
+{
+  "status": "T3_INFRASTRUCTURE_IMPLEMENTATION_PARTIAL",
+  "starting_head": "ae78e048af09216220a3d4e5f1ee3b46c6cba301",
+  "pytest_tests_passed": 209,
+  "pytest_subtests_passed": 17,
+  "scope": "combined public and private infrastructure development suite; mixed unit/synthetic and actual local crypto/socket/process/SQLite checks",
+  "csharp_transport_tests_passed": 7,
+  "full_runner_build": "BLOCKED_NETSDK1004_MISSING_RESTORE_ASSETS_AND_DISK_CAPACITY",
+  "runner_upstream": "197ca027b90de199464dee3bb9ff198a1db60967",
+  "research_executed": false,
+  "kvm_executed": false,
+  "github_actions_job_executed": false,
+  "live_github_identity_verified": false,
+  "live_aws_verified": false,
+  "execution_authorized": false,
+  "terminal_pass_signing_enabled": false,
+  "connected_local_canaries": [
+    "Csharp inherited FD -> Supervisor -> forbidden step rejection before Worker factory",
+    "CA -> actual sealed native key FD -> separate Launcher process certificate/SPKI/binding verification",
+    "TLS1.3 exporter challenge -> Ed25519 -> atomic SQLite permit consume (GitHub metadata synthetic)",
+    "signed source/fixture bytes -> closed Guest adapter -> signed completion over real AF_UNIX child process",
+    "actual pidfd cancellation -> lease ending -> retained partial bytes",
+    "signed inventory -> encrypted byte storage -> immutable exact version reader -> audit/aggregation contracts"
+  ],
+  "remaining_code_gaps": [
+    "namespace networking and trusted mounts/jail setup",
+    "pinned deployable Launcher/guest image and complete supervisor-to-VMM deployment",
+    "complete all 23 frozen gate and supplemental evidence clauses"
+  ],
+  "review_ready": false
+}

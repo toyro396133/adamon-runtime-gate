@@ -1,0 +1,102 @@
+{
+  "direct_packages": {
+    "Azure.Storage.Blobs": [
+      "12.30.0"
+    ],
+    "Microsoft.AspNet.WebApi.Client": [
+      "6.0.0"
+    ],
+    "Microsoft.DevTunnels.Connections": [
+      "1.3.60"
+    ],
+    "Microsoft.Win32.Registry": [
+      "5.0.0"
+    ],
+    "Minimatch": [
+      "2.0.0"
+    ],
+    "Newtonsoft.Json": [
+      "13.0.3"
+    ],
+    "System.Formats.Asn1": [
+      "10.0.12"
+    ],
+    "System.IO.FileSystem.AccessControl": [
+      "5.0.0"
+    ],
+    "System.Net.Http": [
+      "4.3.4"
+    ],
+    "System.Private.Uri": [
+      "4.3.2"
+    ],
+    "System.Security.Cryptography.Cng": [
+      "5.0.0"
+    ],
+    "System.Security.Cryptography.Pkcs": [
+      "10.0.12"
+    ],
+    "System.Security.Cryptography.ProtectedData": [
+      "10.0.11"
+    ],
+    "System.ServiceProcess.ServiceController": [
+      "10.0.3",
+      "10.0.9"
+    ],
+    "System.Text.Encoding.CodePages": [
+      "10.0.12"
+    ],
+    "System.Text.RegularExpressions": [
+      "4.3.1"
+    ],
+    "System.Threading.Channels": [
+      "10.0.10"
+    ],
+    "YamlDotNet.Signed": [
+      "5.3.0"
+    ]
+  },
+  "full_runner_build_verified": false,
+  "kind": "OFFLINE_RUNNER_BUILD_PREREQUISITES",
+  "missing_assets": [
+    "src/Runner.Common/obj/project.assets.json",
+    "src/Runner.Listener/obj/project.assets.json",
+    "src/Runner.Sdk/obj/project.assets.json",
+    "src/Runner.Worker/obj/project.assets.json",
+    "src/Sdk/obj/project.assets.json"
+  ],
+  "network_requests": 0,
+  "offline_build_argv": [
+    "dotnet",
+    "build",
+    "src/Runner.Listener/Runner.Listener.csproj",
+    "--no-restore",
+    "-c",
+    "Release",
+    "-p:Version=2.338.0",
+    "-p:BuildNumber=0",
+    "-p:RuntimeIdentifiers=",
+    "-p:RuntimeIdentifier=",
+    "-p:SelfContained=false"
+  ],
+  "projects": [
+    "src/Runner.Common/Runner.Common.csproj",
+    "src/Runner.Listener/Runner.Listener.csproj",
+    "src/Runner.Sdk/Runner.Sdk.csproj",
+    "src/Runner.Worker/Runner.Worker.csproj",
+    "src/Sdk/Sdk.csproj"
+  ],
+  "sdk": "8.0.425",
+  "source_sha256": {
+    "src/Directory.Build.props": "dbf9f9c296891f862a7bee731e0df0f3bc93ce8146a2af4c30b425d36cb20749",
+    "src/Runner.Common/Runner.Common.csproj": "590e6eac748229076982f1b809fb59d0ac40ab3b02ed89967b3aedd89e5adc7f",
+    "src/Runner.Listener/Runner.Listener.csproj": "1706059cf61e42577aa9a40f699c151ccd8a3071f6fc1c42ca72abce30ab84a7",
+    "src/Runner.Sdk/Runner.Sdk.csproj": "9d5b162fab84ddfac7f89cc41deb0ab4c6edcaf81a2c20012d7db51f04cb0e6d",
+    "src/Runner.Worker/Runner.Worker.csproj": "c5daa4ecc565ed264894be165752d7db23e0f83374ca75f43d1325a8fda5a859",
+    "src/Sdk/Sdk.csproj": "12e40b9a3c547483b95eb6f5fc3ab9d3098acf6d75532d35da5ad46a5782f236",
+    "src/global.json": "cb4644a88eecf8383e763f9b6c3da9316a6e6ca69c5a3b73e5be4b102590aa9d"
+  },
+  "status": "BLOCKED_MISSING_ASSETS",
+  "transitive_package_content_pins_verified": false,
+  "upstream_commit": "197ca027b90de199464dee3bb9ff198a1db60967"
+}
