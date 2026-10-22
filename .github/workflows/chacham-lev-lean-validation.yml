@@ -15,6 +15,7 @@ on:
         options:
           - smoke
           - db
+          - corea
           - full
           - all
   push:
@@ -34,8 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      SOURCE_SHA: ${{ inputs.source_sha || 'a2fe36b3d14c3aa94d2bcc3c31ec665bb40beb03' }}
-      TEST_TIER: ${{ github.event_name == 'push' && 'db' || inputs.tier || 'smoke' }}
+      SOURCE_SHA: ${{ inputs.source_sha || '1bc226361ed4751485f4f36ed5ee557a12d2b61f' }}
+      TEST_TIER: ${{ github.event_name == 'push' && 'corea' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       AUD1210_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
@@ -66,7 +67,7 @@ jobs:
           READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::Invalid source SHA"; exit 2; }
-          [[ "$TEST_TIER" == smoke || "$TEST_TIER" == db || "$TEST_TIER" == full || "$TEST_TIER" == all ]] || { echo "::error::Invalid tier"; exit 2; }
+          [[ "$TEST_TIER" == smoke || "$TEST_TIER" == db || "$TEST_TIER" == corea || "$TEST_TIER" == full || "$TEST_TIER" == all ]] || { echo "::error::Invalid tier"; exit 2; }
           test -n "$READ_TOKEN" || { echo "::error::Missing read-only private source access"; exit 2; }
 
       - name: Checkout public summary helper
@@ -145,15 +146,22 @@ jobs:
             node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-unit.json" unit | tee -a "$GITHUB_STEP_SUMMARY"
             run_private typecheck pnpm exec tsc --noEmit
           fi
-          if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
+          if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = corea ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
             # Use SQL migrations, never just Prisma db push; emit only fixed-category setup errors.
             # The reviewed preparer applies six telephone migrations, including triggers.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
               run_private database-target node scripts/e2e/assert-test-database.mjs
               if [ "$last_status" -eq 0 ]; then
+                if [ "$TEST_TIER" = corea ]; then
+                  run_private diagnostic-instrument node "$GITHUB_WORKSPACE/harness/ci/instrument-core-a.cjs"
+                  test "$last_status" -eq 0 || exit 1
+                fi
                 count=0
                 while IFS= read -r -d '' suite; do
+                  if [ "$TEST_TIER" = corea ] && [[ "$suite" != */core-a.integration.test.ts ]]; then
+                    continue
+                  fi
                   count=$((count + 1))
                   # Clone the migrated template for each suite. This prevents
                   # cross-suite tenant/order assumptions from contaminating results.
