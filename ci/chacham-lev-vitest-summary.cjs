@@ -46,6 +46,8 @@ function privateLogFingerprint(label) {
     UNHANDLED: /unhandled rejection|unhandled error/i,
     SQLITE: /sqlite/i,
   };
+  const marker = [...raw.matchAll(/CORE_A_PHASE_(TENANT|USER|CAMPAIGN|PERSON|READY)/g)].map(m => m[1]).at(-1);
+  if (marker) console.log('- ' + label + ' Core A last setup stage: ' + marker);
   const found = Object.entries(marks).filter(([, regex]) => regex.test(raw)).map(([k]) => k);
   return found.length ? found.join(',') : 'OTHER_LOG_SIGNATURE';
 }
