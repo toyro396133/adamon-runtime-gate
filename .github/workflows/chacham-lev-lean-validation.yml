@@ -147,7 +147,7 @@ jobs:
           fi
           if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
             # Use SQL migrations, never just Prisma db push; emit only fixed-category setup errors.
-            # The reviewed preparer applies all six telephone migrations.
+            # The reviewed preparer applies six telephone migrations, including triggers.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
               run_private database-target node scripts/e2e/assert-test-database.mjs
