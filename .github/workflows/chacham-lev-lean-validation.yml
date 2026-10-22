@@ -159,7 +159,11 @@ jobs:
               run_private schema-contract node scripts/e2e/verify-reviewed-sql-schema.mjs
               grep -E '^Schema (verification:|parity phase:)' "$RUNNER_TEMP/private-schema-contract.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
               if [ "$last_status" -eq 0 ] && [ "$TEST_TIER" != schema ]; then
-                run_private integration pnpm run test:db
+                run_private diagnostic-instrument node "$GITHUB_WORKSPACE/harness/ci/instrument-knowledge.cjs"
+                if [ "$last_status" -eq 0 ]; then
+                  run_private integration pnpm run test:db
+                  grep -E '^SQL suite [0-9]+/[0-9]+: last known cleanup phase=' "$RUNNER_TEMP/private-integration.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
+                fi
                 grep -E '^SQL suite [0-9]+/[0-9]+: (PASS|FAIL)|^SQL suites: ' "$RUNNER_TEMP/private-integration.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
               fi
             else
