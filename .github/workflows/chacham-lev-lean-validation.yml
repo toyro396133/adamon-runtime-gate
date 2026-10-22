@@ -1,0 +1,153 @@
+name: Chacham Lev lean validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Private Chacham Lev commit SHA (40 lowercase hex characters)
+        required: false
+        type: string
+      tier:
+        description: Focused test depth
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - full
+          - all
+  push:
+    paths:
+      - .github/workflows/chacham-lev-lean-validation.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chacham-lev-lean-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Lean contracts (private source, public sanitized results)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha || 'd75a9be1551bdfb686810a929c3f753831436e1b' }}
+      TEST_TIER: ${{ github.event_name == 'push' && 'all' || inputs.tier || 'smoke' }}
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
+      PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
+      AUD1210_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
+      CORE_B_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
+      TELEPHONE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
+      NEXTAUTH_SECRET: synthetic-local-test-secret-only
+      AUTH_SECRET: synthetic-local-test-secret-only
+      NODE_OPTIONS: --max-old-space-size=4096
+      NEXT_TELEMETRY_DISABLED: '1'
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: chacham_lev_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chacham_lev_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Validate immutable source and private read-only token
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::Invalid source SHA"; exit 2; }
+          [[ "$TEST_TIER" == smoke || "$TEST_TIER" == full || "$TEST_TIER" == all ]] || { echo "::error::Invalid tier"; exit 2; }
+          test -n "$READ_TOKEN" || { echo "::error::Missing read-only private source access"; exit 2; }
+
+      - name: Checkout exact private source in ephemeral workspace
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+
+      - name: Verify checkout commit
+        shell: bash
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA" || { echo "::error::Source mismatch"; exit 2; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Install locked dependencies (no public logs)
+        shell: bash
+        working-directory: source
+        run: |
+          if ! pnpm install --frozen-lockfile > "$RUNNER_TEMP/private-install.log" 2>&1; then
+            echo "::error::Dependency installation failed; private diagnostics withheld"
+            exit 1
+          fi
+
+      - name: Run selected test tiers and record sanitized results
+        shell: bash
+        working-directory: source
+        run: |
+          set -euo pipefail
+          failures=0
+          last_status=0
+          echo "## Chacham Lev lean validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source SHA: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Requested tier: $TEST_TIER" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Test database: disposable PostgreSQL 18 on runner loopback" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Private test output: never published or uploaded" >> "$GITHUB_STEP_SUMMARY"
+
+          run_private() {
+            local label="$1"
+            shift
+            local started="$SECONDS"
+            local rc=0
+            "$@" > "$RUNNER_TEMP/private-$label.log" 2>&1 || rc=$?
+            last_status="$rc"
+            local result=PASS
+            if [ "$rc" -ne 0 ]; then
+              result=FAIL
+              failures=$((failures + 1))
+              echo "::error::$label failed with exit $rc; logs withheld for private review"
+            fi
+            echo "- $label: $result ($((SECONDS - started)) s)" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          if [ "$TEST_TIER" = smoke ] || [ "$TEST_TIER" = all ]; then
+            run_private smoke pnpm run test:smoke
+          fi
+
+          if [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
+            run_private unit pnpm run test
+            run_private typecheck pnpm exec tsc --noEmit
+            run_private schema pnpm exec prisma db push --skip-generate
+            if [ "$last_status" -eq 0 ]; then
+              run_private integration pnpm run test:db
+            else
+              echo "- integration: BLOCKED (schema setup failed)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          test "$failures" -eq 0
+
+      - name: Erase private source and diagnostics
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          find "$RUNNER_TEMP" -maxdepth 1 -type f -name 'private-*.log' -delete
