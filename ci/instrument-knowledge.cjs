@@ -58,9 +58,11 @@ for(const [label,anchor] of steps){
   s=s.replace(target,"process.stderr.write('KNOWLEDGE_CLEANUP_"+label+"\\n');\n  "+target);
 }
 if(!s.includes("await prisma.campaign.deleteMany"))throw Error('Campaign cleanup hook missing');
-s=s.replace("await prisma.campaign.deleteMany",
-  queryCleanupDependencies + "await prisma.campaign.deleteMany");
-s="import { createHash } from 'node:crypto';\n"+s;
+s=s.replace("await prisma.campaign.deleteMany","await prisma.campaign.deleteMany");
+const hookStart=s.indexOf(' afterAll(async()=>{');
+const hookEnd=s.indexOf('\n });\n it(',hookStart);
+if(hookStart<0||hookEnd<0)throw Error('Teardown hook structure changed');
+s=s.slice(0,hookEnd)+s.slice(hookEnd).replace('\n });\n it(','\n },60000);\n it(');
 const runner='scripts/e2e/run-isolated-sql-suites.mjs';
 let runnerSource=fs.readFileSync(runner,'utf8');
 const anchor="if (phases.length) console.error('SQL suite ' + (index + 1) + '/' + suites.length + ': last known cleanup phase=' + phases.at(-1));";
