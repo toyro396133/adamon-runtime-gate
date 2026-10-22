@@ -9,7 +9,7 @@ concurrency:
   group: import-v2-clean-app
   cancel-in-progress: false
 env:
-  SOURCE_SHA: bc8091ebbd1044913981c9704528f0fc6b2130c6
+  SOURCE_SHA: c9d967262c178294ecac6a87399b475a79e5f518
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
 jobs:
