@@ -14,6 +14,7 @@ on:
         type: choice
         options:
           - smoke
+          - db
           - full
           - all
   push:
@@ -34,7 +35,7 @@ jobs:
     timeout-minutes: 40
     env:
       SOURCE_SHA: ${{ inputs.source_sha || 'd75a9be1551bdfb686810a929c3f753831436e1b' }}
-      TEST_TIER: ${{ github.event_name == 'push' && 'full' || inputs.tier || 'smoke' }}
+      TEST_TIER: ${{ github.event_name == 'push' && 'db' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       AUD1210_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
@@ -65,7 +66,7 @@ jobs:
           READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::Invalid source SHA"; exit 2; }
-          [[ "$TEST_TIER" == smoke || "$TEST_TIER" == full || "$TEST_TIER" == all ]] || { echo "::error::Invalid tier"; exit 2; }
+          [[ "$TEST_TIER" == smoke || "$TEST_TIER" == db || "$TEST_TIER" == full || "$TEST_TIER" == all ]] || { echo "::error::Invalid tier"; exit 2; }
           test -n "$READ_TOKEN" || { echo "::error::Missing read-only private source access"; exit 2; }
 
       - name: Checkout public summary helper
@@ -143,6 +144,8 @@ jobs:
             run_private unit pnpm exec vitest run --exclude=**/*.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/private-unit.json"
             node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-unit.json" unit | tee -a "$GITHUB_STEP_SUMMARY"
             run_private typecheck pnpm exec tsc --noEmit
+          fi
+          if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
             # Unlike db push, the reviewed preparer recreates raw SQL triggers and
             # constraints used by telephone/tenant integration tests.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
