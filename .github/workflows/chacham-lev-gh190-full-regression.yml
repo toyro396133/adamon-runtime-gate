@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      SOURCE_SHA: 95bf7d6d344b9161b2fc85677d9756ce0b9f1983
+      SOURCE_SHA: 9bba373d61165a6dd952aa67350901b3df0e6450
       DATABASE_URL: postgresql://postgres:isolated-only@127.0.0.1:5432/not_used
       NEXTAUTH_SECRET: isolated-runner-test-secret-do-not-deploy
       NODE_OPTIONS: --max-old-space-size=4096
