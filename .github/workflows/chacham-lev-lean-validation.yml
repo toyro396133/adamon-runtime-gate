@@ -4,34 +4,30 @@ on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Private Chacham Lev commit SHA (40 lowercase hex characters)
+        description: Immutable private Chacham Lev SHA (40 lowercase hex)
         required: false
         type: string
       tier:
-        description: Focused test depth
+        description: Selected validation depth
         required: true
         default: smoke
         type: choice
-        options:
-          - smoke
-          - db
-          - schema
-          - full
-          - all
+        options: [smoke, db, schema, full, all]
   push:
     paths:
       - .github/workflows/chacham-lev-lean-validation.yml
+      - ci/chacham-lev-public-gate.cjs
+      - ci/chacham-lev-public-gate.test.cjs
 
 permissions:
   contents: read
-
 concurrency:
   group: chacham-lev-lean-validation
   cancel-in-progress: false
 
 jobs:
   validate:
-    name: Lean contracts (private source, public sanitized results)
+    name: Isolated private contracts; public numeric evidence only
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
@@ -57,29 +53,49 @@ jobs:
           POSTGRES_DB: chacham_lev_test
           POSTGRES_HOST_AUTH_METHOD: trust
         ports:
-          - 5432:5432
+          - 127.0.0.1:5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres -d chacham_lev_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     steps:
-      - name: Validate immutable source and private read-only token
+      - name: Suppress PostgreSQL SQL/error statements in public service logs
         shell: bash
-        env:
-          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
         run: |
-          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::Invalid source SHA"; exit 2; }
-          [[ "$TEST_TIER" == smoke || "$TEST_TIER" == db || "$TEST_TIER" == schema || "$TEST_TIER" == full || "$TEST_TIER" == all ]] || { echo "::error::Invalid tier"; exit 2; }
-          test -n "$READ_TOKEN" || { echo "::error::Missing read-only private source access"; exit 2; }
+          # GitHub uploads service container logs, including failing SQL statements.
+          # Configure before private queries occur. An unsuccessful hardening is fatal.
+          psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 <<'SQL' > /dev/null
+          ALTER SYSTEM SET log_min_messages = 'panic';
+          ALTER SYSTEM SET log_min_error_statement = 'panic';
+          SELECT pg_reload_conf();
+          SQL
+          test "$(psql "$DATABASE_URL" -X -Atq -c 'SHOW log_min_error_statement')" = panic
+          test "$(psql "$DATABASE_URL" -X -Atq -c 'SHOW log_min_messages')" = panic
 
-      - name: Checkout public summary helper
+      - name: Validate immutable private commit input
+        shell: bash
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::Invalid source reference"; exit 2; }
+          [[ "$TEST_TIER" =~ ^(smoke|db|schema|full|all)$ ]] || { echo "::error::Invalid validation tier"; exit 2; }
+
+      - name: Checkout trusted public validation code
         uses: actions/checkout@v4
         with:
           path: harness
           persist-credentials: false
 
-      - name: Checkout exact private source in ephemeral workspace
+      - name: Validate public gate and adversarial fixtures
+        run: node harness/ci/chacham-lev-public-gate.test.cjs
+
+      - name: Check private read-only checkout capability
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          test -n "$READ_TOKEN" || { echo "::error::Private source token unavailable"; exit 2; }
+
+      - name: Checkout private commit (temporary, read token only here)
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
@@ -89,9 +105,9 @@ jobs:
           fetch-depth: 0
           path: source
 
-      - name: Verify checkout commit
-        shell: bash
+      - name: Verify private immutable commit
         working-directory: source
+        shell: bash
         run: |
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA" || { echo "::error::Source mismatch"; exit 2; }
 
@@ -102,75 +118,95 @@ jobs:
         with:
           version: 11
 
-      - name: Install locked dependencies (no public logs)
-        shell: bash
+      - name: Install locked dependencies without logs
         working-directory: source
+        shell: bash
         run: |
           if ! pnpm install --frozen-lockfile > "$RUNNER_TEMP/private-install.log" 2>&1; then
-            echo "::error::Dependency installation failed; private diagnostics withheld"
+            echo "::error::Private dependency install failed; evidence withheld"
             exit 1
           fi
 
-      - name: Run selected test tiers and record sanitized results
-        shell: bash
+      - name: Execute requested validation and publish only trusted evidence
         working-directory: source
+        shell: bash
         run: |
           set -euo pipefail
           failures=0
+          invalid=0
           last_status=0
-          echo "## Chacham Lev lean validation" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Source SHA: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Requested tier: $TEST_TIER" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Test database: disposable PostgreSQL 18 on runner loopback" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Private test output: never published or uploaded" >> "$GITHUB_STEP_SUMMARY"
+          last_elapsed=0
+          public="$RUNNER_TEMP/validated-summary.md"
+          : > "$public"
 
           run_private() {
             local label="$1"
             shift
-            local started="$SECONDS"
+            local started=$SECONDS
             local rc=0
             "$@" > "$RUNNER_TEMP/private-$label.log" 2>&1 || rc=$?
-            last_status="$rc"
-            local result=PASS
-            if [ "$rc" -ne 0 ]; then
-              result=FAIL
-              failures=$((failures + 1))
-              echo "::error::$label failed with exit $rc; logs withheld for private review"
+            last_status=$rc
+            last_elapsed=$((SECONDS-started))
+            if ((rc!=0)); then
+              failures=$((failures+1))
+              echo "::error::$label failed (private output withheld)"
             fi
-            echo "- $label: $result ($((SECONDS - started)) s)" >> "$GITHUB_STEP_SUMMARY"
+          }
+          numeric_report() {
+            local kind="$1" file="$2"
+            if ! node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-public-gate.cjs" "$kind" "$file" "$last_status" "$last_elapsed" >> "$public"; then
+              invalid=$((invalid+1))
+              echo "::error::Invalid or absent $kind evidence; no summary will be published"
+            fi
+          }
+          simple_report() {
+            local label="$1"
+            echo "- $label: $([[ $last_status == 0 ]] && echo PASS || echo FAIL) exit=$last_status seconds=$last_elapsed" >> "$public"
           }
 
-          if [ "$TEST_TIER" = smoke ] || [ "$TEST_TIER" = all ]; then
-            run_private smoke pnpm run test:smoke
+          if [[ "$TEST_TIER" == smoke || "$TEST_TIER" == all ]]; then
+            run_private smoke pnpm run test:smoke --reporter=json --outputFile="$RUNNER_TEMP/private-smoke.json"
+            numeric_report smoke "$RUNNER_TEMP/private-smoke.json"
           fi
-
-          if [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
-            run_private unit pnpm exec vitest run --exclude=**/*.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/private-unit.json"
-            node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-unit.json" unit | tee -a "$GITHUB_STEP_SUMMARY"
+          if [[ "$TEST_TIER" == full || "$TEST_TIER" == all ]]; then
+            run_private unit pnpm exec vitest run '--exclude=**/*.integration.test.ts' --reporter=json --outputFile="$RUNNER_TEMP/private-unit.json"
+            numeric_report unit "$RUNNER_TEMP/private-unit.json"
             run_private typecheck pnpm exec tsc --noEmit
+            simple_report typecheck
             run_private lint pnpm run lint
+            simple_report lint
             run_private build pnpm run build
+            simple_report build
           fi
-          if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = schema ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
-            # Run unmodified private tests against PostgreSQL clones with all reviewed database guards.
-            # The reviewed preparer applies six telephone migrations, including triggers and referential guards.
-            run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
-            if [ "$last_status" -eq 0 ]; then
-              run_private schema-contract node scripts/e2e/verify-reviewed-sql-schema.mjs
-              grep -E '^Schema (verification:|parity phase:)' "$RUNNER_TEMP/private-schema-contract.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
-              if [ "$last_status" -eq 0 ] && [ "$TEST_TIER" != schema ]; then
-                run_private integration pnpm run test:db
-                grep -E '^SQL suite [0-9]+/[0-9]+: (PASS|FAIL)|^SQL suites: ' "$RUNNER_TEMP/private-integration.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
+          if [[ "$TEST_TIER" == db || "$TEST_TIER" == schema || "$TEST_TIER" == full || "$TEST_TIER" == all ]]; then
+            run_private schema-setup pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
+            simple_report schema-setup
+            if ((last_status==0)); then
+              run_private schema env CHACHAM_SCHEMA_REPORT_PATH="$RUNNER_TEMP/private-schema.json" node scripts/e2e/verify-reviewed-sql-schema.mjs
+              numeric_report schema "$RUNNER_TEMP/private-schema.json"
+              if ((last_status==0)) && [[ "$TEST_TIER" != schema ]]; then
+                run_private integration env CHACHAM_SQL_REPORT_PATH="$RUNNER_TEMP/private-integration.json" pnpm run test:db
+                numeric_report integration "$RUNNER_TEMP/private-integration.json"
               fi
             else
-              echo "- integration: BLOCKED (schema setup failed)" >> "$GITHUB_STEP_SUMMARY"
+              failures=$((failures+1))
             fi
           fi
-          test "$failures" -eq 0
+          if ((invalid==0)); then
+            {
+              echo '## Chacham Lev validated evidence'
+              echo "- Private source SHA: $SOURCE_SHA"
+              echo "- Tier: $TEST_TIER"
+              cat "$public"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '## Chacham Lev: public evidence rejected; no partial results published' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          test "$failures" -eq 0 && test "$invalid" -eq 0
 
-      - name: Erase private source and diagnostics
+      - name: Erase temporary private checkout and diagnostics
         if: always()
         shell: bash
         run: |
           rm -rf -- "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/harness"
-          find "$RUNNER_TEMP" -maxdepth 1 -type f \( -name 'private-*.log' -o -name 'private-*.json' \) -delete
+          find "$RUNNER_TEMP" -maxdepth 1 -type f \( -name 'private-*.log' -o -name 'private-*.json' -o -name 'validated-summary.md' \) -delete
