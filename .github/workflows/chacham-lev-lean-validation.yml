@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      SOURCE_SHA: ${{ inputs.source_sha || 'c9be0a0dc19d5e4a31468f18ea3f68644b02042d' }}
+      SOURCE_SHA: ${{ inputs.source_sha || '4149bed0f3e35501d368c8b125afe1faf874938e' }}
       TEST_TIER: ${{ github.event_name == 'push' && 'schema' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
@@ -154,18 +154,10 @@ jobs:
             # The reviewed preparer applies six telephone migrations, including triggers.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
-              if [ "$TEST_TIER" = schema ]; then
-                run_private schema-diff bash -c 'pnpm exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --script > "$RUNNER_TEMP/private-schema-diff.sql"'
-                if [ "$last_status" -eq 0 ]; then
-                  node "$GITHUB_WORKSPACE/harness/ci/schema-diff-classify.cjs" "$RUNNER_TEMP/private-schema-diff.sql" | tee -a "$GITHUB_STEP_SUMMARY"
-                  if grep -Eq '^-- (Create|Drop|Alter|Add|Rename|Redefine)|^(CREATE|DROP|ALTER) ' "$RUNNER_TEMP/private-schema-diff.sql"; then
-                    failures=$((failures+1))
-                    echo "::error::Prisma schema drift detected; private SQL withheld"
-                  fi
-                fi
-              else
+              run_private schema-contract node scripts/e2e/verify-reviewed-sql-schema.mjs
+              grep -E '^Schema verification: ' "$RUNNER_TEMP/private-schema-contract.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
+              if [ "$last_status" -eq 0 ] && [ "$TEST_TIER" != schema ]; then
                 run_private integration pnpm run test:db
-                # Fixed-format summaries contain no private test names or raw output.
                 grep -E '^SQL suite [0-9]+/[0-9]+: (PASS|FAIL)|^SQL suites: ' "$RUNNER_TEMP/private-integration.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
               fi
             else
