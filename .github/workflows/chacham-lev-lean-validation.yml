@@ -152,7 +152,7 @@ jobs:
             run_private build pnpm run build
           fi
           if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = schema ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
-            # Diagnose a possible teardown timeout using a disposable SQL test environment.
+            # Classify the private synthetic cleanup error by Prisma code only.
             # The reviewed preparer applies six telephone migrations, including triggers and referential guards.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
