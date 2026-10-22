@@ -9,7 +9,7 @@ concurrency:
   group: import-v2-clean-app
   cancel-in-progress: false
 env:
-  SOURCE_SHA: c9d967262c178294ecac6a87399b475a79e5f518
+  SOURCE_SHA: 68c9f4f74617592975e9ad8337552287f6cfaeb9
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
 jobs:
@@ -31,6 +31,7 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/import_v2_test
+      IMPORT_V2_REFERENCE_REHEARSAL: '1'
       NEXTAUTH_SECRET: disposable-synthetic-session-secret-only-no-real-account
       AUTH_SECRET: disposable-synthetic-session-secret-only-no-real-account
     steps:
@@ -80,12 +81,18 @@ jobs:
           pnpm exec prisma db push --skip-generate > "$RUNNER_TEMP/import-v2-app-private/schema.log" 2>&1
           node tests/import-v2/clean_app_runtime.mjs --seed-only > "$RUNNER_TEMP/import-v2-app-private/seed.json"
           echo "Current schema and exact synthetic 1-Tenant/3-User empty fixture PASS." >> "$GITHUB_STEP_SUMMARY"
-      - name: Build real production application against empty fixture
+      - name: Rehearse all1420 references twice against full Prisma fixture
+        working-directory: source
+        run: |
+          python tests/import-v2/reference_prisma_rehearsal.py > "$RUNNER_TEMP/import-v2-app-private/reference-rehearsal.json"
+          cat "$RUNNER_TEMP/import-v2-app-private/reference-rehearsal.json"
+          cat "$RUNNER_TEMP/import-v2-app-private/reference-rehearsal.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build real production application against reference-only fixture
         working-directory: source
         run: |
           pnpm run build > "$RUNNER_TEMP/import-v2-app-private/build.log" 2>&1
           echo "Production build PASS (native isolated database)." >> "$GITHUB_STEP_SUMMARY"
-      - name: Browser login all roles and verify empty UI API and institution isolation
+      - name: Browser login all roles and verify canonical reference UI API and institution isolation
         working-directory: source
         run: |
           set +e
@@ -97,7 +104,7 @@ jobs:
           lines = (Path(os.environ['RUNNER_TEMP'])/'import-v2-app-private/result.json').read_text().splitlines()
           allowed = {'status','stage','code','pages_verified','environment','real_credentials_logins',
                      'original_protected_accounts_tested','reference_api_reads','tenant_isolation',
-                     'fixture_accounts_unchanged','business_rows_created_by_read_flow'}
+                     'fixture_accounts_unchanged','business_rows_created_by_read_flow','reference_rows'}
           reports = []
           for line in lines:
               try:
