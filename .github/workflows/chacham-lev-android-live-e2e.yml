@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PRIVATE_SOURCE_SHA: ae873c75847ce5fe4f0e080f1d355c0b5841c739
+  PRIVATE_SOURCE_SHA: 401522ad6dae61294f4dcb40035794027bdfeece
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
   DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_android_e2e
@@ -21,7 +21,7 @@ jobs:
   android-live-server-e2e:
     name: Android WebView ⇄ isolated Next.js ⇄ disposable PostgreSQL
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 18
     services:
       postgres:
         image: postgres:18
@@ -51,7 +51,7 @@ jobs:
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 0
-          ref: ae873c75847ce5fe4f0e080f1d355c0b5841c739
+          ref: 401522ad6dae61294f4dcb40035794027bdfeece
           path: source
 
       - name: Verify pinned source and isolated E2E-only build type
