@@ -53,15 +53,18 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
           cache-read-only: true
 
       - name: Install Android compile SDK
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v sdkmanager
+          yes | sdkmanager --licenses > /dev/null || test "${PIPESTATUS[1]}" -eq 0
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Compile, run JVM policy tests, assemble debug APK
         run: gradle -p source/android-field :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
