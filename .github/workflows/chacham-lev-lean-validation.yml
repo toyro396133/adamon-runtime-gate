@@ -179,6 +179,7 @@ jobs:
                   run_private "integration-$count" pnpm exec vitest run "$suite" --no-file-parallelism --reporter=json --outputFile="$RUNNER_TEMP/private-integration-$count.json"
                   node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-integration-$count.json" "integration-$count" | tee -a "$GITHUB_STEP_SUMMARY"
                   if [ "$TEST_TIER" = corea ]; then
+                    # Diagnoses only synthetic foreign keys and tenant-match counts, never actual row data.
                     node "$GITHUB_WORKSPACE/harness/ci/core-a-fk-fingerprint.cjs" | tee -a "$GITHUB_STEP_SUMMARY"
                   fi
                 done < <(find src -type f -name '*.integration.test.ts' -print0 | sort -z)
