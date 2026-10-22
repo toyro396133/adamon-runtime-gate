@@ -50,9 +50,9 @@ raw test output nor diagnostic artifacts are published here.
 
 To run a newer private commit after this workflow is merged, select
 **Actions → Chacham Lev lean validation → Run workflow**, supply its exact
-40-hex-character commit SHA and choose `smoke` (focused), `full` (unit,
+40-hex-character commit SHA and choose `smoke` (focused), `db` (isolated PostgreSQL integration only), `full` (unit,
 TypeScript and isolated PostgreSQL integration), or `all`. Only changing
-the workflow file itself triggers an automatic `full` verification;
+the workflow file itself triggers an automatic `db` verification;
 application commits do not trigger public CI automatically.
 
 All database tests use a fresh PostgreSQL 18 service inside the job, never
