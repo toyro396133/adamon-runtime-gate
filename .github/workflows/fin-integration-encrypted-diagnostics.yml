@@ -1,0 +1,96 @@
+name: FIN-INTEGRATION encrypted public-runner diagnostics
+on:
+  push:
+    branches: [validation/fin-integration-20261022]
+    paths:
+      - .github/workflows/fin-integration-encrypted-diagnostics.yml
+permissions:
+  contents: read
+jobs:
+  encrypted-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: dd_fin_integration
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55480:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dd_fin_integration"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SOURCE_SHA: b3a75b4d58b7e43548f59b26c681f804e6ab2582
+      DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_fin_integration
+      DD_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_fin_integration
+      CORE_B_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_fin_integration
+      NODE_OPTIONS: --max-old-space-size=4096
+      NEXT_TELEMETRY_DISABLED: '1'
+      FIN_RSA_PUB_B64: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQm9qQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FZOEFNSUlCaWdLQ0FZRUF5WkVIMEphcWFBclZaSUZ0S3hMNQpKalFHR0NjNk9nL0RUODJ1QWY4UU93K00rYkVWZ0lqV3ZaR0NCTzlUM2RacXpGNFo4SkxKWlJaaDNZc1oxOCtuCng4c2Rib3R6dzl5cC9scm0rRTlRYkc4cEZmbkxPSnNoZkVUV0tIMFZYMHRnK0R4Mkora0R0OGl4eTEybm9aMm0KOVJCZzlWRnoybW1OQVVhU0NReEI2dVBqSXNxNE9UQzlDRGpLekUrYWlvM3ZGYnIzZUhrNk81K0pYZjcyd2ZKeQp3UEpCNUd3c2JwR0ZUMGsrSEIrWEkvRFZjYWRBek9JZGZhOEp1d3FWNWhWakhxNkpaWGcveGJSbjJLR0ZVVG5BCnlUdnB5Y1NFVFFTVUZmTmFudStGc21jOWVGWWxUZ0JGVUY1ZVQzallYV2dXQ2dSc3FVRWVHOHdLSHRjeXBhZUcKbURzRTJMVWFJSlVuUXl0SE5oUUlEc1E3dVJ4VmgzTGFLWktjdVVHODdvaFNsQnJjNCtGdW1OV0JVWVZLSHdnQgpEWHAvaGVBQjYrTlBWM1lOc3BuQnVVNWZScm9VaiszQ0lWc3kvL2t4d1F5dkxFUjZyZE5zdVBuYXQ3VHRoUjhNCkl2QytkQTZURVJySjhIZGZGYk45cytNanpTaFJLbTVYMFc5UXdQUVVLTnRuQWdNQkFBRT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==
+    steps:
+      - name: Validate private-read access
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Synthetic secrets
+        shell: bash
+        run: |
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - name: Install
+        working-directory: source
+        run: pnpm install --frozen-lockfile > "$RUNNER_TEMP/fin-install.log" 2>&1 || { echo "::error::private install failed"; exit 1; }
+      - name: Run isolated diagnostics; publish only RSA-encrypted error excerpts
+        working-directory: source
+        shell: bash
+        run: |
+          set -uo pipefail
+          node scripts/door-to-door/upgrade-rehearsal.cjs > "$RUNNER_TEMP/fin-schema.log" 2>&1
+          echo "FIN_SCHEMA_RC=$?"
+          pnpm exec vitest run src/services/DoorToDoorService.integration.test.ts src/services/FieldExecutionContextService.integration.test.ts src/services/DoorToDoorBaselineService.integration.test.ts src/actions/core-conditional-gates.integration.test.ts > "$RUNNER_TEMP/fin-sql.log" 2>&1
+          echo "FIN_SQL_RC=$?"
+          pnpm exec tsc --noEmit > "$RUNNER_TEMP/fin-ts.log" 2>&1
+          echo "FIN_TS_RC=$?"
+          pnpm run build > "$RUNNER_TEMP/fin-build.log" 2>&1
+          echo "FIN_BUILD_RC=$?"
+          node - <<'NODE'
+          const fs=require('node:fs'),crypto=require('node:crypto'),path=require('node:path');
+          const pub=Buffer.from(process.env.FIN_RSA_PUB_B64,'base64').toString('utf8');
+          for(const k of ['schema','sql','ts','build']){
+            const file=path.join(process.env.RUNNER_TEMP,'fin-'+k+'.log');
+            const content=fs.readFileSync(file,'utf8');
+            let lines=content.split(/\r?\n/).filter(x=> /(?:error TS\d+|\bFAIL\b|AssertionError|Error:|Expected|Failed to compile|Module not found|PrismaClientKnownRequestError|Test Files|Tests\s)/i.test(x));
+            if(lines.length===0)lines=content.split(/\r?\n/).filter(Boolean).slice(-4);
+            lines=lines.slice(0,10);
+            lines.forEach((line,i)=>{
+              const ciphertext=crypto.publicEncrypt({key:pub,oaepHash:'sha256',padding:crypto.constants.RSA_PKCS1_OAEP_PADDING}, Buffer.from(line.slice(0,200),'utf8'));
+              console.log('FIN_ENCRYPTED_'+k+'_'+i+'='+ciphertext.toString('base64'));
+            });
+          }
+          NODE
+      - name: Erase sensitive temporary files
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          find "$RUNNER_TEMP" -maxdepth 1 -type f -name 'fin-*.log' -delete
