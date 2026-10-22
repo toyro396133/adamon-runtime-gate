@@ -1,0 +1,127 @@
+name: FIN-INTEGRATION isolated acceptance (GH-232)
+on:
+  push:
+    branches: [validation/fin-integration-20261022]
+    paths:
+      - .github/workflows/fin-integration-validation.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fin-integration-gh232-isolated
+  cancel-in-progress: false
+
+jobs:
+  finance-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: dd_fin_integration_20261022
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55480:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dd_fin_integration_20261022"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SOURCE_SHA: b3a75b4d58b7e43548f59b26c681f804e6ab2582
+      DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_fin_integration_20261022
+      DD_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_fin_integration_20261022
+      CORE_B_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_fin_integration_20261022
+      NODE_OPTIONS: --max-old-space-size=4096
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Guard private-source access and pinned SHA
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test -n "$READ_TOKEN" || { echo "::error::Private read token unavailable"; exit 2; }
+
+      - name: Checkout immutable private source without storing token
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+
+      - name: Verify exact source SHA
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Generate ephemeral auth credentials for synthetic test only
+        shell: bash
+        run: |
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - name: Install dependencies without publishing private diagnostics
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm install --frozen-lockfile > "$RUNNER_TEMP/private-install.log" 2>&1 || { echo "::error::Install failed (diagnostics withheld)"; exit 1; }
+
+      - name: Run compositional guards, SQL upgrade and narrow regressions
+        working-directory: source
+        shell: bash
+        run: |
+          set -uo pipefail
+          failures=0
+          schema_ok=0
+          echo "## GH-232 FIN-INTEGRATION isolated acceptance" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Database: synthetic, disposable, PostgreSQL 18, loopback port 55480" >> "$GITHUB_STEP_SUMMARY"
+          echo "- No production, provider calls, secrets or original test logs published" >> "$GITHUB_STEP_SUMMARY"
+          run_case() {
+            local label="$1"; shift
+            local rc=0
+            "$@" > "$RUNNER_TEMP/private-fin-$label.log" 2>&1 || rc=$?
+            if [ "$rc" -eq 0 ]; then
+              echo "- $label: PASS" >> "$GITHUB_STEP_SUMMARY"
+            else
+              failures=$((failures+1))
+              echo "- $label: FAIL (exit $rc)" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::$label failed (private diagnostics withheld)"
+            fi
+            return "$rc"
+          }
+          run_case schema-validate pnpm exec prisma validate || true
+          run_case focused-vitest pnpm exec vitest run             src/actions/receiptActions.test.ts             src/services/OfflineSyncService.test.ts             src/lib/payment-capabilities.test.ts             src/services/PaymentIntegrationService.test.ts             src/actions/c2Actions.test.ts             src/app/api/field/door-to-door/route.test.ts || true
+          if run_case schema-rehearsal node scripts/door-to-door/upgrade-rehearsal.cjs; then
+            schema_ok=1
+          fi
+          if [ "$schema_ok" -eq 1 ]; then
+            run_case native-postgresql pnpm exec vitest run               src/services/DoorToDoorService.integration.test.ts               src/services/FieldExecutionContextService.integration.test.ts               src/services/DoorToDoorBaselineService.integration.test.ts               src/actions/core-conditional-gates.integration.test.ts || true
+          else
+            echo "- native-postgresql: BLOCKED (schema-rehearsal failed)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          run_case typescript pnpm exec tsc --noEmit || true
+          run_case focused-eslint pnpm exec eslint             src/actions/receiptActions.ts src/actions/receiptActions.test.ts             src/services/DonationProcessingService.ts             src/services/OfflineSyncService.ts src/services/OfflineSyncService.test.ts             src/app/api/field/app/route.ts             src/app/api/nedarim-notify/route.ts             src/actions/financial.ts             src/services/DoorToDoorService.ts || true
+          run_case build pnpm run build || true
+          echo "- Failed stages: $failures" >> "$GITHUB_STEP_SUMMARY"
+          test "$failures" -eq 0
+
+      - name: Delete ephemeral source and diagnostic logs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          find "$RUNNER_TEMP" -maxdepth 1 -type f -name 'private-*.log' -delete
