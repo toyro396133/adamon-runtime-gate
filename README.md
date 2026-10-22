@@ -39,3 +39,23 @@ M2.9 remains NOT VERIFIED until the workflow completes every acceptance check.
 Do not implement M2.10 or independently update the private project's roadmap.
 Return the run URL, frozen source SHA, counts, versions and preservation status
 to the planning agent. No runtime execution is claimed by preparing these files.
+
+
+## Chacham Lev lean test runner (separate from ADAMON M2.9)
+
+Workflow: `.github/workflows/chacham-lev-lean-validation.yml`. It tests a
+pinned commit of the **private** `toyro396133/chacham-lev` repository using
+the existing read-only `CHACHAM_LEV_READ_TOKEN` secret. Neither source files,
+raw test output nor diagnostic artifacts are published here.
+
+To run a newer private commit after this workflow is merged, select
+**Actions → Chacham Lev lean validation → Run workflow**, supply its exact
+40-hex-character commit SHA and choose `smoke` (focused), `full` (unit,
+TypeScript and isolated PostgreSQL integration), or `all`. Only changing
+the workflow file itself triggers the one-off automatic `all` verification;
+application commits do not trigger public CI automatically.
+
+All database tests use a fresh PostgreSQL 18 service inside the job, never
+production or Neon. Status and runtime alone appear in the public summary.
+A failure is **not** a PASS; private diagnostics are intentionally not
+available from the public Actions log. Treat the full E2E workflow separately.
