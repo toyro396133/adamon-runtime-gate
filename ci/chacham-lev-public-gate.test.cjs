@@ -32,8 +32,9 @@ try{
   assert.equal(run('unit',{...valid,success:false},'0').status,2,'afterAll failure claimed success');
   const teardown={...valid,success:false,numFailedTestSuites:1,numPassedTestSuites:179,
     testResults:valid.testResults.map((r,i)=>i===0?{...r,status:'failed'}:r)};
-  assert.equal(run('unit',teardown,'1').status,1,
-    'legitimate teardown failure not reported as failure');
+  assert.equal(run('unit',teardown,'1').status,0,
+    'legitimate teardown failure was not accepted as a structured FAIL');
+  assert.match(run('unit',teardown,'1').stdout,/unit: FAIL/);
   assert.equal(run('integration',{version:1,discoveredFiles:11,executedFiles:11,
     passedFiles:11,failedFiles:0,passedCases:210,failedCases:0,
     skippedCases:0,cleanupSucceeded:11,cleanupFailed:0}).status,0);
