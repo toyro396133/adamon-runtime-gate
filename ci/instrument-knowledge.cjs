@@ -1,73 +1,27 @@
-// Temporary, diagnostic-only source markers on the ephemeral private checkout.
-// No assertions are changed; do not publish source, logs, or row data.
+// Diagnostic-only, ephemeral instrumentation. The helper modifies a private
+// checkout inside a disposable CI job; only fixed error codes are printed.
 const fs=require('node:fs');
-const path='src/services/knowledge-evidence.integration.test.ts';
-let s=fs.readFileSync(path,'utf8');
-
-const queryCleanupDependencies = [
-"  // Ephemeral diagnostic: anonymous counts of FK rows preventing campaign cleanup.",
-"  try {",
-"    const fkMeta = await prisma.$queryRawUnsafe<Array<{rel: string; col: string}>>(",
-"      'SELECT cl.relname AS rel, att.attname AS col FROM pg_constraint c ' +",
-"      'JOIN pg_class cl ON cl.oid=c.conrelid ' +",
-"      'JOIN pg_namespace ns ON ns.oid=cl.relnamespace ' +",
-"      'JOIN pg_attribute att ON att.attrelid=c.conrelid AND att.attnum=c.conkey[1] ' +",
-"      'WHERE c.contype=\\'f\\' AND c.confrelid=\\'public.\"Campaign\"\\'::regclass ' +",
-"      'AND array_length(c.conkey,1)=1 AND ns.nspname=\\'public\\''",
-"    );",
-"    const qi = (v:string) => '\"' + v.replaceAll('\"','\"\"') + '\"';",
-"    for (const r of fkMeta) {",
-"      const found = await prisma.$queryRawUnsafe<Array<{n:number}>>(",
-"        'SELECT count(*)::int AS n FROM '+qi(r.rel)+' WHERE '+qi(r.col)+' IN ($1,$2,$3)',",
-"        campaign,next,id('foreign-c')",
-"      );",
-"      if (found[0]?.n) {",
-"        const tag=createHash('sha256').update(r.rel).digest('hex').slice(0,8);",
-"        process.stderr.write('KNOWLEDGE_BLOCKER_'+tag+'_'+found[0].n+'\\n');",
-"      }",
-"    }",
-"  } catch (error) {",
-"    const code=typeof error?.code==='string'&&/^[A-Z0-9]{2,6}$/.test(error.code)?error.code:'UNKNOWN';",
-"    process.stderr.write('KNOWLEDGE_BLOCKER_DIAG_ERROR_'+code+'\\n');",
-"  }",
-].join("\n") + "\n  ";
-
-const steps=[
-['ASSIGN_EVENT','prisma.studentGroupAssignmentEvent.deleteMany'],
-['ASSIGN','prisma.studentGroupAssignment.deleteMany'],
-['ROUTE_AFFINITY','prisma.routeAffinity.deleteMany'],
-['ROUTE_CONTINUITY','prisma.routeContinuityDecision.deleteMany'],
-['ROUTE_DONOR','prisma.routeDonorLink.deleteMany'],
-['ROUTE_CAMPAIGN','prisma.routeCampaign.deleteMany'],
-['DONATION','prisma.donation.deleteMany'],
-['PLEDGE','prisma.pledge.deleteMany'],
-['CONNECTION','prisma.personConnection.deleteMany'],
-['AUDIT','prisma.auditLog.deleteMany'],
-['ADDRESS','prisma.address.deleteMany'],
-['ROUTE','prisma.route.deleteMany'],
-['GROUP','prisma.group.deleteMany'],
-['CITY','prisma.city.deleteMany'],
-['CAMPAIGN','prisma.campaign.deleteMany'],
-['PERSON','prisma.person.deleteMany'],
-['TENANT','prisma.tenant.deleteMany'],
-['DISCONNECT','prisma.$disconnect()'],
-];
-for(const [label,anchor] of steps){
-  const target='await '+anchor;
-  if(!s.includes(target))throw Error('Knowledge fixture anchor mismatch');
-  s=s.replace(target,"process.stderr.write('KNOWLEDGE_CLEANUP_"+label+"\\n');\n  "+target);
-}
-if(!s.includes("await prisma.campaign.deleteMany"))throw Error('Campaign cleanup hook missing');
-s=s.replace("await prisma.campaign.deleteMany","await prisma.campaign.deleteMany");
-const hookStart=s.indexOf(' afterAll(async()=>{');
-const hookEnd=s.indexOf('\n });\n it(',hookStart);
-if(hookStart<0||hookEnd<0)throw Error('Teardown hook structure changed');
-s=s.slice(0,hookEnd)+s.slice(hookEnd).replace('\n });\n it(','\n },60000);\n it(');
+const file='src/services/knowledge-evidence.integration.test.ts';
+let s=fs.readFileSync(file,'utf8');
+const before="await prisma.campaign.deleteMany({where:{tenantId:{in:[tenant,other]}}});";
+if(!s.includes(before))throw Error('Fixture contract changed');
+s=s.replace(before, [
+"try {",
+"  "+before,
+"} catch (error) {",
+"  const code=typeof error?.code==='string' && /^P[12][0-9]{3}$/.test(error.code)?error.code:'UNKNOWN';",
+"  process.stderr.write('KNOWLEDGE_CAMPAIGN_ERROR_'+code+'\\n');",
+"  throw error;",
+"}",
+].join("\n"));
+fs.writeFileSync(file,s);
 const runner='scripts/e2e/run-isolated-sql-suites.mjs';
-let runnerSource=fs.readFileSync(runner,'utf8');
-const anchor="if (phases.length) console.error('SQL suite ' + (index + 1) + '/' + suites.length + ': last known cleanup phase=' + phases.at(-1));";
-if(!runnerSource.includes(anchor))throw Error('SQL cleanup reporter contract changed');
-runnerSource=runnerSource.replace(anchor,anchor+"\n        const refs=[...hidden.matchAll(/KNOWLEDGE_BLOCKER_([a-f0-9]{8})_([0-9]{1,5})/g)].map(m=>m[1]+':'+m[2]);\n        if(refs.length)console.error('SQL suite '+(index+1)+'/'+suites.length+': anonymous blocker counts='+refs.join(','));\n        const diag=[...hidden.matchAll(/KNOWLEDGE_BLOCKER_DIAG_ERROR_([A-Z0-9]{2,8})/g)].map(m=>m[1]);\n        if(diag.length)console.error('SQL suite '+(index+1)+'/'+suites.length+': blocker introspection error='+diag.at(-1));");
-fs.writeFileSync(runner,runnerSource);
-fs.writeFileSync(path,s);
-console.log('Knowledge teardown diagnostic markers applied to ephemeral checkout only.');
+let src=fs.readFileSync(runner,'utf8');
+const anchor="const category = /foreign key|P2003|23503/i.test(hidden)";
+if(!src.includes(anchor))throw Error('SQL reporter changed');
+src=src.replace(anchor,
+"const codes=[...hidden.matchAll(/KNOWLEDGE_CAMPAIGN_ERROR_(P[12][0-9]{3}|UNKNOWN)/g)].map(m=>m[1]);\n"+
+"        if(codes.length)console.error('SQL cleanup Prisma code='+codes.at(-1));\n"+
+"        "+anchor);
+fs.writeFileSync(runner,src);
+console.log('Ephemeral fixed-code diagnostic prepared; no private source or row data published.');
