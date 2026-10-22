@@ -14,22 +14,26 @@ function run(kind,report,rc='0') {
   assert.equal((p.stdout+p.stderr).includes(secret),false,'private payload appeared in public output');
   return p;
 }
-const valid={
-  success:true,numTotalTestSuites:1,numPassedTestSuites:1,numFailedTestSuites:0,
-  numPendingTestSuites:0,numTotalTests:1,numPassedTests:1,numFailedTests:0,
-  numPendingTests:0,testResults:[{name:secret,status:'passed',message:secret,
-    assertionResults:[{status:'passed',fullName:secret}]}],
-  privateExtraField:secret
-};
+function fixture(n) {
+  return {success:true,numTotalTestSuites:n,numPassedTestSuites:n,numFailedTestSuites:0,
+    numPendingTestSuites:0,numTotalTests:n,numPassedTests:n,numFailedTests:0,
+    numPendingTests:0,testResults:Array.from({length:n},()=>({name:secret,status:'passed',
+      message:secret,assertionResults:[{status:'passed',fullName:secret}]})),
+    privateExtraField:secret};
+}
+const valid=fixture(180);
+const smoke=fixture(20);
 try{
   assert.equal(run('unit',valid).status,0,'valid strict aggregate rejected');
+  assert.equal(run('smoke',smoke).status,0,'valid smoke suite rejected');
   assert.equal(run('unit',{...valid,numPassedTests:secret}).status,2,'malicious numeric field not rejected');
   assert.equal(run('unit',{...valid,numPassedTests:1,numFailedTests:1}).status,2,'inconsistent counts not rejected');
-  assert.equal(run('smoke',{...valid,testResults:[]}).status,2,'missing suite evidence not rejected');
+  assert.equal(run('smoke',{...smoke,testResults:[]}).status,2,'missing suite evidence not rejected');
   assert.equal(run('unit',{...valid,success:false},'0').status,2,'afterAll failure claimed success');
-  assert.equal(run('unit',{...valid,success:false,numFailedTestSuites:1,numPassedTestSuites:0,
-    testResults:[{status:'failed',assertionResults:[{status:'passed'}]}]},'1').status,1,
-      'legitimate teardown failure not reported as failure');
+  const teardown={...valid,success:false,numFailedTestSuites:1,numPassedTestSuites:179,
+    testResults:valid.testResults.map((r,i)=>i===0?{...r,status:'failed'}:r)};
+  assert.equal(run('unit',teardown,'1').status,1,
+    'legitimate teardown failure not reported as failure');
   assert.equal(run('integration',{version:1,discoveredFiles:11,executedFiles:11,
     passedFiles:11,failedFiles:0,passedCases:210,failedCases:0,
     skippedCases:0,cleanupSucceeded:11,cleanupFailed:0}).status,0);
