@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      SOURCE_SHA: ${{ inputs.source_sha || 'aec45af6157f72b22107558568230d0a0b6d8fb3' }}
+      SOURCE_SHA: ${{ inputs.source_sha || '73d5ba40d53b7719054988b76609649f6d4b018c' }}
       TEST_TIER: ${{ github.event_name == 'push' && 'all' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
@@ -164,6 +164,10 @@ jobs:
             echo "- $label: $([[ $last_status == 0 ]] && echo PASS || echo FAIL) exit=$last_status seconds=$last_elapsed" >> "$public"
           }
 
+          if [[ "$TEST_TIER" == db || "$TEST_TIER" == schema || "$TEST_TIER" == full || "$TEST_TIER" == all ]]; then
+            run_private migration-negative node --test scripts/e2e/reviewed-sql-migrations.test.mjs
+            simple_report migration-negative
+          fi
           if [[ "$TEST_TIER" == smoke || "$TEST_TIER" == all ]]; then
             run_private smoke pnpm run test:smoke --reporter=json --outputFile="$RUNNER_TEMP/private-smoke.json"
             numeric_report smoke "$RUNNER_TEMP/private-smoke.json"
@@ -184,6 +188,10 @@ jobs:
             if ((last_status==0)); then
               run_private schema env CHACHAM_SCHEMA_REPORT_PATH="$RUNNER_TEMP/private-schema.json" node scripts/e2e/verify-reviewed-sql-schema.mjs
               numeric_report schema "$RUNNER_TEMP/private-schema.json"
+              if ((last_status==0)); then
+                run_private schema-negative node scripts/e2e/verify-reviewed-sql-schema-negative.mjs
+                simple_report schema-negative
+              fi
               if ((last_status==0)) && [[ "$TEST_TIER" != schema ]]; then
                 run_private integration env CHACHAM_SQL_REPORT_PATH="$RUNNER_TEMP/private-integration.json" pnpm run test:db
                 numeric_report integration "$RUNNER_TEMP/private-integration.json"
