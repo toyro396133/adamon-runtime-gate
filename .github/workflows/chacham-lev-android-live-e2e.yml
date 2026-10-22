@@ -1,0 +1,198 @@
+name: Chacham Lev APK real WebView isolated HTTPS E2E
+
+on:
+  push:
+    branches: [validation/chacham-lev-android-pilot-20261022]
+    paths:
+      - .github/workflows/chacham-lev-android-live-e2e.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRIVATE_SOURCE_SHA: 67ab257a01281d00bf63591673eb9cfcf3c10bb9
+  NEXT_TELEMETRY_DISABLED: '1'
+  NODE_OPTIONS: --max-old-space-size=4096
+  DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_android_e2e
+  NEXTAUTH_URL: https://10.0.2.2:8443
+
+jobs:
+  android-live-server-e2e:
+    name: Android WebView ⇄ isolated Next.js ⇄ disposable PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: chacham_lev_android_e2e
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chacham_lev_android_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Require private repository read-only token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN" || { echo "ENVIRONMENT: missing private-source read token"; exit 2; }
+
+      - name: Checkout exact private source SHA with reviewed migration history
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          ref: 67ab257a01281d00bf63591673eb9cfcf3c10bb9
+          path: source
+
+      - name: Verify pinned source and isolated E2E-only build type
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$PRIVATE_SOURCE_SHA"
+          test -f source/android-field/e2e/tls-proxy.mjs
+          test -f source/android-field/e2e/smoke-cdp.mjs
+          test -f source/android-field/app/src/e2e/AndroidManifest.xml
+          test -f source/scripts/e2e/prepare-mobile-database.ts
+          test -f source/scripts/e2e/seed-mobile-system.ts
+          echo "Isolated Android integration target and source commit: VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+          log-accepted-android-sdk-licenses: 'false'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+          cache-read-only: true
+
+      - name: Generate disposable credentials
+        shell: bash
+        run: |
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+
+      - name: Install source dependencies (private runner)
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare genuinely isolated schema using reviewed SQL migrations
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
+
+      - name: Seed non-personal test identities and route fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-mobile-system.ts
+
+      - name: Build actual Next.js server
+        working-directory: source
+        run: pnpm run build
+
+      - name: Start isolated local Next.js server
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec next start -H 127.0.0.1 -p 3000 > "$RUNNER_TEMP/chacham-android-next.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/chacham-android-next.pid"
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3000/login >/dev/null; then
+              echo "Disposable Next.js fixture: READY" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Isolated server did not become ready"
+          exit 1
+
+      - name: Create ephemeral TLS authority and local HTTPS gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/mobile-tls" source/android-field/app/src/e2e/res/raw
+          cd "$RUNNER_TEMP/mobile-tls"
+          openssl req -new -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout ca.key -out ca.pem -subj "/CN=Chacham-Isolated-CI-CA" >/dev/null 2>&1
+          openssl req -new -newkey rsa:2048 -nodes -keyout leaf.key \
+            -out leaf.csr -subj "/CN=10.0.2.2" >/dev/null 2>&1
+          printf "subjectAltName=IP:10.0.2.2\nextendedKeyUsage=serverAuth\n" > leaf.ext
+          openssl x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+            -out leaf.pem -days 1 -sha256 -extfile leaf.ext >/dev/null 2>&1
+          cp ca.pem "$GITHUB_WORKSPACE/source/android-field/app/src/e2e/res/raw/e2e_ca.pem"
+          E2E_TLS_KEY="$RUNNER_TEMP/mobile-tls/leaf.key" \
+          E2E_TLS_CERT="$RUNNER_TEMP/mobile-tls/leaf.pem" \
+            node "$GITHUB_WORKSPACE/source/android-field/e2e/tls-proxy.mjs" \
+            > "$RUNNER_TEMP/mobile-tls/proxy.log" 2>&1 &
+          for i in $(seq 1 20); do
+            if curl --cacert ca.pem -fsS https://10.0.2.2:8443/login \
+              --resolve 10.0.2.2:8443:127.0.0.1 >/dev/null; then
+              echo "Isolated HTTPS gateway: READY" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "TLS gateway not responding"; exit 1
+
+      - name: Compile and test isolated HTTPS Android build
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          gradle -p source/android-field :app:testE2eUnitTest :app:assembleE2e --no-daemon --console=plain
+          test -s source/android-field/app/build/outputs/apk/e2e/app-e2e.apk
+
+      - name: Grant Android emulator KVM access
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Verify real NextAuth and assigned field route in Android WebView
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            adb install -r source/android-field/app/build/outputs/apk/e2e/app-e2e.apk
+            adb shell am start -W -n org.chachamlev.mobilepilot.e2e/org.chachamlev.mobilepilot.MainActivity
+            sleep 6
+            node source/android-field/e2e/smoke-cdp.mjs
+
+      - name: Record verified isolated assertions
+        shell: bash
+        run: |
+          echo "APK E2E-only build: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Real Android WebView + NextAuth + personal FIELD assignment on isolated PostgreSQL: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Private source checked out at exact SHA; no production DB access" >> "$GITHUB_STEP_SUMMARY"
+          echo "No APK created for public download by this test-only job" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove private source, TLS material and runtime credentials
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$RUNNER_TEMP/mobile-tls"
