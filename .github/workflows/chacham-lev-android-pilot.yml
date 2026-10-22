@@ -1,0 +1,92 @@
+name: Chacham Lev Android pilot APK (isolated runner)
+on:
+  push:
+    branches:
+      - validation/chacham-lev-android-pilot-20261022
+    paths:
+      - .github/workflows/chacham-lev-android-pilot.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PRIVATE_SOURCE_SHA: d731384b699a48da96d40197de3968b7cf3f7a9d
+
+jobs:
+  build-android-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Require private read-only token
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          test -n "$READ_TOKEN" || { echo "ENVIRONMENT: CHACHAM_LEV_READ_TOKEN missing"; exit 2; }
+
+      - name: Checkout exact private source (temporary)
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: d731384b699a48da96d40197de3968b7cf3f7a9d
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+
+      - name: Verify pinned source and expected Android app paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$PRIVATE_SOURCE_SHA"
+          test -f source/android-field/app/src/main/java/org/chachamlev/mobilepilot/MainActivity.java
+          test -f source/android-field/app/src/main/java/org/chachamlev/mobilepilot/NavigationPolicy.java
+          test -f source/android-field/app/src/test/java/org/chachamlev/mobilepilot/NavigationPolicyTest.java
+          test -f source/src/app/mobile/page.tsx
+          test -f source/src/app/mobile/telephone/page.tsx
+          test -f source/src/app/field/page.tsx
+          echo "Source checkout and existing mobile surfaces: VERIFIED" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+          cache-read-only: true
+
+      - name: Install Android compile SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Compile, run JVM policy tests, assemble debug APK
+        run: gradle -p source/android-field :app:testDebugUnitTest :app:assembleDebug --no-daemon --console=plain
+
+      - name: Validate APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=source/android-field/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          file "$apk"
+          sha256sum "$apk" | tee "$RUNNER_TEMP/apk.sha256"
+          echo "Android JVM navigation-policy tests and assembleDebug: PASS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Built from pinned source: $PRIVATE_SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Signing: Android debug signature (pilot only)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish APK binary only (no source or credentials)
+        uses: actions/upload-artifact@v4
+        with:
+          name: chacham-lev-mobile-pilot-debug-apk
+          path: source/android-field/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Remove private source and checkouts
+        if: always()
+        shell: bash
+        run: rm -rf -- "$GITHUB_WORKSPACE/source"
