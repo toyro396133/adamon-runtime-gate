@@ -46,7 +46,8 @@ try {
   for (const suite of bad.slice(0, 25)) {
     const name = String(suite.name || '');
     const relative = name.includes('/source/') ? name.split('/source/').pop() : name.split('/').slice(-2).join('/');
-    const messages = [suite.message, ...(suite.assertionResults || []).flatMap(a => a.failureMessages || [])].filter(Boolean).join('\n');
+    const messages = [suite.message, suite.failureMessage, suite.errorMessage,
+      ...(suite.assertionResults || []).flatMap(a => a.failureMessages || [])].filter(Boolean).join('\n');
     const assertions = (suite.assertionResults || []).filter(a => a.status === 'failed');
     console.log('- ' + label + ' failing ID: ' + hash(relative) + ' / ' + classify(messages) +
       ' / cases=' + assertions.length + ' / ' + safeSignature(messages));
