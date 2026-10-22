@@ -1,0 +1,183 @@
+name: Chacham Lev PR191 native PostgreSQL validation
+
+on:
+  push:
+    branches: [validation/pr191-parental-native-20261022]
+    paths: [.github/workflows/chacham-lev-pr191-native.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chacham-lev-pr191-native
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 83625c178aea31f348bc94f515593e6a9bdad702
+  NEXT_TELEMETRY_DISABLED: '1'
+  NODE_OPTIONS: --max-old-space-size=4096
+
+jobs:
+  validate:
+    name: Pinned private source / disposable PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: parental_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d parental_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/parental_test?connection_limit=5
+      PARENTAL_TEST_DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/parental_test?connection_limit=5
+      PEOPLE_TEST_DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/parental_test?connection_limit=5
+      PARENTAL_NATIVE_CONCURRENCY: '1'
+      NEXTAUTH_SECRET: isolated-runner-test-secret-do-not-deploy
+    steps:
+      - name: Require existing private-source read secret
+        env:
+          SOURCE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$SOURCE_TOKEN" || { echo 'ENVIRONMENT missing read secret'; exit 2; }
+      - name: Checkout pinned private source into ephemeral workspace
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify exact source and initialize private-output directory
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p "$RUNNER_TEMP/pr191-private"
+          printf 'Source: %s\nDisposable native PostgreSQL 18, no Production access.\n' "$SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install frozen dependencies without lifecycle scripts
+        working-directory: source
+        run: |
+          set +e
+          pnpm install --frozen-lockfile --ignore-scripts > "$RUNNER_TEMP/pr191-private/install.log" 2>&1
+          result=$?
+          echo "Install exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Generate client and create schema in disposable service only
+        working-directory: source
+        run: |
+          set +e
+          pnpm exec prisma generate > "$RUNNER_TEMP/pr191-private/generate.log" 2>&1
+          result=$?
+          echo "Prisma generate exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$result" -ne 0 ]; then exit "$result"; fi
+          pnpm exec prisma db push --skip-generate > "$RUNNER_TEMP/pr191-private/schema.log" 2>&1
+          result=$?
+          echo "Disposable schema exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Native database tests including forced two-backend contention
+        id: native
+        working-directory: source
+        run: |
+          set +e
+          pnpm exec vitest run src/services/ParentalSourcingService.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/pr191-private/native.json" > "$RUNNER_TEMP/pr191-private/native.log" 2>&1
+          result=$?
+          echo "Native tests exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Graph population database regression
+        if: success() || failure()
+        working-directory: source
+        run: |
+          set +e
+          pnpm exec vitest run src/lib/people-query.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/pr191-private/people.json" > "$RUNNER_TEMP/pr191-private/people.log" 2>&1
+          result=$?
+          echo "Population tests exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Focused route service and UI regression
+        if: success() || failure()
+        working-directory: source
+        run: |
+          set +e
+          pnpm exec vitest run src/services/ParentalSourcingService.test.ts src/app/api/admin/parental-sourcing/route.test.ts src/app/api/admin/institutions/route.test.ts 'src/app/(authenticated)/parental-sourcing/page.test.tsx' --reporter=json --outputFile="$RUNNER_TEMP/pr191-private/focused.json" > "$RUNNER_TEMP/pr191-private/focused.log" 2>&1
+          result=$?
+          echo "Focused tests exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Adjacent merge education and annual-assignment regression
+        if: success() || failure()
+        working-directory: source
+        run: |
+          set +e
+          pnpm exec vitest run src/services/PersonMergeService.test.ts src/actions/personEducationActions.test.ts src/services/AnnualStudentGroupAssignmentService.test.ts --reporter=json --outputFile="$RUNNER_TEMP/pr191-private/adjacent.json" > "$RUNNER_TEMP/pr191-private/adjacent.log" 2>&1
+          result=$?
+          echo "Adjacent tests exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Full TypeScript validation
+        if: success() || failure()
+        working-directory: source
+        run: |
+          set +e
+          pnpm exec tsc --noEmit > "$RUNNER_TEMP/pr191-private/tsc.log" 2>&1
+          result=$?
+          echo "TypeScript exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Full ESLint validation
+        if: success() || failure()
+        working-directory: source
+        run: |
+          set +e
+          pnpm exec eslint . > "$RUNNER_TEMP/pr191-private/lint.log" 2>&1
+          result=$?
+          echo "ESLint exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Production build without live data
+        if: success() || failure()
+        working-directory: source
+        run: |
+          set +e
+          env -u DATABASE_URL pnpm run build > "$RUNNER_TEMP/pr191-private/build.log" 2>&1
+          result=$?
+          echo "Build exit: $result" >> "$GITHUB_STEP_SUMMARY"
+          exit "$result"
+      - name: Publish only aggregate counts and require complete test execution
+        if: always()
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 'pr191-private'
+          ok = True
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              for label, expected in [('native', 7), ('people', 11), ('focused', 40), ('adjacent', 15)]:
+                  try:
+                      report = json.loads((root / (label + '.json')).read_text())
+                      passed = report['numPassedTests']
+                      failed = report['numFailedTests']
+                      pending = report['numPendingTests']
+                      suites_failed = report['numFailedTestSuites']
+                      good = passed == expected and failed == 0 and pending == 0 and suites_failed == 0
+                      line = f'{label}: passed={passed}, failed={failed}, pending={pending}, failed_suites={suites_failed}, complete={good}'
+                  except Exception:
+                      good = False
+                      line = f'{label}: report unavailable; NOT_VERIFIED'
+                  print(line)
+                  summary.write(line + '\n')
+                  ok = ok and good
+              summary.write('Raw output, source, databases and individual failure details are not uploaded.\n')
+          raise SystemExit(0 if ok else 1)
+      - name: Remove private source and raw outputs
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$RUNNER_TEMP/pr191-private"
+          echo 'Private source and raw outputs deleted.' >> "$GITHUB_STEP_SUMMARY"
