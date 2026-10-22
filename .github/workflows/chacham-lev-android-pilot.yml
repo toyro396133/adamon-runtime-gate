@@ -144,9 +144,7 @@ jobs:
             adb shell am start -W -n org.chachamlev.mobilepilot/.MainActivity
             sleep 8
             adb shell pidof org.chachamlev.mobilepilot >/dev/null
-            if adb logcat -d -s AndroidRuntime:E | grep -F 'Process: org.chachamlev.mobilepilot'; then
-              echo "AndroidRuntime crash for pilot process"; exit 1
-            fi
+            adb logcat -d -s AndroidRuntime:E | grep -F 'Process: org.chachamlev.mobilepilot' && exit 1 || true
             adb exec-out screencap -p > offline-launch.png
             test -s offline-launch.png
 
