@@ -52,10 +52,10 @@ To run a newer private commit after this workflow is merged, select
 **Actions → Chacham Lev lean validation → Run workflow**, supply its exact
 40-hex-character commit SHA and choose `smoke` (focused), `full` (unit,
 TypeScript and isolated PostgreSQL integration), or `all`. Only changing
-the workflow file itself triggers the one-off automatic `all` verification;
+the workflow file itself triggers an automatic `full` verification;
 application commits do not trigger public CI automatically.
 
 All database tests use a fresh PostgreSQL 18 service inside the job, never
-production or Neon. Status and runtime alone appear in the public summary.
+production or Neon. Only status, runtime, aggregate counts and anonymous failing suite IDs/categories appear in the public summary.
 A failure is **not** a PASS; private diagnostics are intentionally not
 available from the public Actions log. Treat the full E2E workflow separately.
