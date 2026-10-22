@@ -19,6 +19,37 @@ function safeSignature(text) {
     : /afterAll/i.test(text) ? 'AFTER_ALL' : 'UNKNOWN_STAGE';
   return [type, stage, ...(codes.length ? codes : ['NO_PRISMA_CODE'])].join('/');
 }
+
+// The runner's private Vitest log is read only inside the ephemeral job.
+// Output MUST remain a fixed vocabulary: never log the input text or paths.
+function privateLogFingerprint(label) {
+  let raw = '';
+  try {
+    raw = fs.readFileSync(process.env.RUNNER_TEMP + '/private-' + label + '.log', 'utf8');
+  } catch {
+    return 'LOG_UNAVAILABLE';
+  }
+  const marks = {
+    PRISMA_P2002: /P2002|Unique constraint failed/i,
+    PRISMA_P2003: /P2003|Foreign key constraint failed/i,
+    PRISMA_P2022: /P2022|column .* does not exist/i,
+    PRISMA_P2021: /P2021|table .* does not exist/i,
+    DATABASE_DRIVER: /P1001|P1000|ECONNREFUSED|connection terminated/i,
+    DB_UNIQUE_INDEX: /Campaign_one_active_operational_per_tenant/i,
+    IMPORT_RESOLVE: /Cannot find module|Failed to resolve import/i,
+    MOCK_ERROR: /No .* export is defined on the .* mock|vi\.mock|\[vitest\]/i,
+    TYPE_ERROR: /TypeError:|Cannot read properties of/i,
+    REFERENCE_ERROR: /ReferenceError:/i,
+    HOOK_TIMEOUT: /Hook timed out|beforeAll hook timed out|afterAll hook timed out/i,
+    SETUP_HOOK: /beforeAll|before each|beforeEach/i,
+    TEARDOWN_HOOK: /afterAll|after each|afterEach/i,
+    UNHANDLED: /unhandled rejection|unhandled error/i,
+    SQLITE: /sqlite/i,
+  };
+  const found = Object.entries(marks).filter(([, regex]) => regex.test(raw)).map(([k]) => k);
+  return found.length ? found.join(',') : 'OTHER_LOG_SIGNATURE';
+}
+
 function classify(text) {
   if (/P20\d{2}|P10\d{2}/.test(text)) return 'DATABASE_PRISMA';
   if (/relation .* does not exist|column .* does not exist|unknown field|unknown argument/i.test(text)) return 'SCHEMA';
@@ -43,6 +74,7 @@ try {
     ['pendingTests', report.numPendingTests],
   ].map(([k,v]) => k + '=' + (Number.isFinite(v) ? v : '?')).join(' ');
   console.log('- ' + label + ' aggregate: ' + counts);
+  if (bad.length) console.log('- ' + label + ' sanitized private-log signature: ' + privateLogFingerprint(label));
   for (const suite of bad.slice(0, 25)) {
     const name = String(suite.name || '');
     const relative = name.includes('/source/') ? name.split('/source/').pop() : name.split('/').slice(-2).join('/');
