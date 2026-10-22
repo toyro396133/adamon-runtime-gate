@@ -1,0 +1,96 @@
+name: GH-190 native Prisma tenant relation smoke
+on:
+  push:
+    branches:
+      - validation/gh-190-reference-tables-20261022
+    paths:
+      - .github/workflows/gh190-prisma-smoke.yml
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-password
+          POSTGRES_DB: chacham_lev_gh190_disposable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      SOURCE_SHA: 9bba373d61165a6dd952aa67350901b3df0e6450
+      DATABASE_URL: postgresql://postgres:isolated-ci-password@127.0.0.1:5432/chacham_lev_gh190_disposable
+      NEXTAUTH_SECRET: synthetic-ci-only
+    steps:
+      - name: Require source read token
+        env:
+          TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify source
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install dependencies and generate Prisma
+        working-directory: source
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec prisma generate
+      - name: Create schema in disposable PostgreSQL 18 only
+        working-directory: source
+        run: pnpm exec prisma db push --skip-generate
+      - name: Verify real Prisma relational write and cross-tenant guards
+        working-directory: source
+        run: |
+          node <<'NODE'
+          const assert=require('node:assert/strict');
+          const {PrismaClient}=require('@prisma/client');
+          const db=new PrismaClient();
+          (async()=>{
+            const tA=await db.tenant.create({data:{name:'Synthetic Tenant A',subdomain:'gh190-smoke-a'}});
+            const tB=await db.tenant.create({data:{name:'Synthetic Tenant B',subdomain:'gh190-smoke-b'}});
+            const cA=await db.city.create({data:{name:'Synthetic City A',tenantId:tA.id}});
+            const cB=await db.city.create({data:{name:'Synthetic City B',tenantId:tB.id}});
+            const nA=await db.neighborhood.create({data:{name:'Synthetic Neighborhood A',cityId:cA.id}});
+            const sA=await db.street.create({data:{name:'Synthetic Street A',cityId:cA.id,neighborhoodId:nA.id}});
+            assert.equal(sA.cityId,cA.id);
+            assert.equal(await db.city.findFirst({where:{id:cB.id,tenantId:tA.id}}),null);
+            assert.equal(await db.street.findFirst({where:{id:sA.id,city:{tenantId:tB.id}}}),null);
+            const safe=await db.street.update({where:{id:sA.id,city:{tenantId:tA.id}},data:{name:'Street A updated'}});
+            assert.equal(safe.name,'Street A updated');
+            await assert.rejects(()=>db.street.update({where:{id:sA.id,city:{tenantId:tB.id}},data:{name:'Cross-tenant mutation'}}));
+            await assert.rejects(()=>db.street.delete({where:{id:sA.id,city:{tenantId:tB.id}}}));
+            const neigh=await db.neighborhood.update({where:{id:nA.id,city:{tenantId:tA.id}},data:{region:'Synthetic region'}});
+            assert.equal(neigh.region,'Synthetic region');
+            await assert.rejects(()=>db.neighborhood.delete({where:{id:nA.id,city:{tenantId:tB.id}}}));
+            const citySyn=await db.citySynonym.create({data:{alias:'alias-city-a',tenantId:tA.id,cityId:cA.id}});
+            const streetSyn=await db.streetSynonym.create({data:{alias:'alias-street-a',tenantId:tA.id,streetId:sA.id}});
+            assert.equal((await db.citySynonym.findFirst({where:{id:citySyn.id,tenantId:tA.id,city:{tenantId:tA.id}}})).id,citySyn.id);
+            assert.equal((await db.streetSynonym.findFirst({where:{id:streetSyn.id,tenantId:tA.id,street:{city:{tenantId:tA.id}}}})).id,streetSyn.id);
+            assert.equal(await db.streetSynonym.findFirst({where:{id:streetSyn.id,tenantId:tB.id,street:{city:{tenantId:tB.id}}}}),null);
+            console.log('PASS native Prisma writes and nested tenant ownership predicates on synthetic records');
+          })().catch(e=>{console.error('SMOKE FAILED',e.message);process.exitCode=1}).finally(()=>db.$disconnect());
+          NODE
+      - name: Wipe private source checkout
+        if: always()
+        run: rm -rf "$GITHUB_WORKSPACE/source"
