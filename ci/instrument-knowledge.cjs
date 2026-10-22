@@ -27,7 +27,7 @@ const queryCleanupDependencies = [
 "      }",
 "    }",
 "  } catch {process.stderr.write('KNOWLEDGE_BLOCKER_DIAG_ERROR\\n');}",
-].join("\\n") + "\\n  ";
+].join("\n") + "\n  ";
 
 const steps=[
 ['ASSIGN_EVENT','prisma.studentGroupAssignmentEvent.deleteMany'],
