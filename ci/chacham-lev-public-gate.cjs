@@ -58,6 +58,15 @@ if (kind === 'smoke' || kind === 'unit') {
        report.cleanupFailed===0 && report.cleanupSucceeded===report.discoveredFiles)) reject('EXIT');
   counts = [report.discoveredFiles,report.executedFiles,report.passedCases,report.failedCases,report.skippedCases,report.cleanupSucceeded,report.cleanupFailed];
 } else {
+  if (report.version === 1 && report.status === 'FAIL') {
+    const allowed = new Set(['MANIFEST_INVALID','MANIFEST_INVENTORY','MANIFEST_HASH',
+      'CONTRACT_INCOMPLETE','PARITY_DRIFT','FOREIGN_KEY','CHECK_CONSTRAINT',
+      'PARTIAL_UNIQUE','TRIGGER_DEFINITION','FUNCTION_DEFINITION','EXTRA_TRIGGER',
+      'OTHER_PRIVATE_FAILURE']);
+    console.error('Public schema rejection class: ' +
+      (allowed.has(report.reason) ? report.reason : 'UNRECOGNIZED'));
+    reject('SCHEMA');
+  }
   if (report.version !== 1 || report.status !== 'PASS' ||
       !integer(report.migrations) || report.migrations < 1 ||
       !integer(report.foreignKeys) || report.foreignKeys < 1 ||
