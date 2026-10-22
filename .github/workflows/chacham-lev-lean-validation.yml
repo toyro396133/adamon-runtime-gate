@@ -155,8 +155,8 @@ jobs:
                 count=0
                 while IFS= read -r -d '' suite; do
                   count=$((count + 1))
-                  # Isolate suites: development-bypass fixtures cannot select a
-                  # previously created tenant from another integration suite.
+                  # Clone the migrated template for each suite. This prevents
+                  # cross-suite tenant/order assumptions from contaminating results.
                   db="chacham_lev_test_$count"
                   run_private "clone-$count" createdb -h 127.0.0.1 -U postgres --template=chacham_lev_test "$db"
                   if [ "$last_status" -ne 0 ]; then
