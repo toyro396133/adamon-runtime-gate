@@ -98,3 +98,67 @@ jobs:
         if: always()
         shell: bash
         run: rm -rf -- "$GITHUB_WORKSPACE/source"
+
+  emulator-install-smoke:
+    name: Android emulator offline launch smoke
+    needs: build-android-pilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: chacham-lev-mobile-pilot-debug-apk
+          path: pilot
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+          log-accepted-android-sdk-licenses: 'false'
+
+      - name: Allow KVM for test emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install and open APK without live server access
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -e
+            adb install -r pilot/app-debug.apk
+            adb shell svc wifi disable
+            adb shell svc data disable
+            adb shell am start -W -n org.chachamlev.mobilepilot/.MainActivity
+            sleep 8
+            adb shell pidof org.chachamlev.mobilepilot >/dev/null
+            if adb logcat -d -s AndroidRuntime:E | grep -F 'Process: org.chachamlev.mobilepilot'; then
+              echo "AndroidRuntime crash for pilot process"; exit 1
+            fi
+            adb exec-out screencap -p > offline-launch.png
+            test -s offline-launch.png
+
+      - name: Record smoke outcome
+        run: |
+          echo "Android emulator: installed and Activity launched with network disabled" >> "$GITHUB_STEP_SUMMARY"
+          echo "No production credentials or writes used" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload non-sensitive offline screen
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-pilot-offline-smoke-image
+          path: offline-launch.png
+          if-no-files-found: error
+          retention-days: 3
