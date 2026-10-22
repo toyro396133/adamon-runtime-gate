@@ -152,7 +152,7 @@ jobs:
             run_private build pnpm run build
           fi
           if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = schema ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
-            # Reproduce the reviewed migrations and anonymize fixture cleanup diagnostics.
+            # Diagnose a possible teardown timeout using a disposable SQL test environment.
             # The reviewed preparer applies six telephone migrations, including triggers and referential guards.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
