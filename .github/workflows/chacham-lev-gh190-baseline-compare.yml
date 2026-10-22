@@ -1,0 +1,74 @@
+name: Chacham Lev GH-190 full regression baseline comparison
+on:
+  push:
+    branches:
+      - validation/gh-190-reference-tables-20261022
+    paths:
+      - .github/workflows/chacham-lev-gh190-baseline-compare.yml
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main-base
+            source: e48ee84b8635bd39c8b44ce1b817648da123ce20
+          - label: pr-192
+            source: 95bf7d6d344b9161b2fc85677d9756ce0b9f1983
+    name: ${{ matrix.label }} — full suite
+    env:
+      DATABASE_URL: postgresql://postgres:isolated-only@127.0.0.1:5432/not_used
+      NEXTAUTH_SECRET: isolated-runner-test-secret-do-not-deploy
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Require read-only private source secret
+        env:
+          TOKEN_PRESENT: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$TOKEN_PRESENT"
+      - name: Checkout exact private source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ matrix.source }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify source revision
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "${{ matrix.source }}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Execute complete Vitest and publish only sanitized test names
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run --reporter=dot --maxWorkers=2 > "$RUNNER_TEMP/vitest-result.log" 2>&1
+          status=$?
+          set -e
+          echo "## ${{ matrix.label }} / ${{ matrix.source }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Vitest exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g' "$RUNNER_TEMP/vitest-result.log" \
+            | grep -E '^( FAIL | Test Files |      Tests | ❯ src/| × )' \
+            | tail -100 \
+            | tee "$RUNNER_TEMP/filtered-names.txt" || true
+          cat "$RUNNER_TEMP/filtered-names.txt" >> "$GITHUB_STEP_SUMMARY"
+          echo "Comparison only: a failed suite is expected during investigation; review names and counts."
+      - name: Delete checkout and diagnostic logs
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          rm -f -- "$RUNNER_TEMP/vitest-result.log" "$RUNNER_TEMP/filtered-names.txt"
