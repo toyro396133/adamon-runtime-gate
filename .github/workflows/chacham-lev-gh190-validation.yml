@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  SOURCE_SHA: 95bf7d6d344b9161b2fc85677d9756ce0b9f1983
+  SOURCE_SHA: 9bba373d61165a6dd952aa67350901b3df0e6450
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
   DATABASE_URL: postgresql://postgres:isolated-only@127.0.0.1:5432/not_used
@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          pnpm exec vitest run src/app/api/admin/reference-tables/route.test.ts --reporter=dot > "$RUNNER_TEMP/gh190-vitest.log" 2>&1
+          pnpm exec vitest run src/app/api/admin/reference-tables/route.test.ts 'src/app/(authenticated)/admin/reference-tables/page.test.tsx' --reporter=dot > "$RUNNER_TEMP/gh190-vitest.log" 2>&1
           status=$?
           echo "Vitest exit: $status" >> "$GITHUB_STEP_SUMMARY"
           grep -E '^( FAIL | Test Files | Tests | Duration |.*reference-tables/route.test.ts|.*AssertionError|.*Error:)' "$RUNNER_TEMP/gh190-vitest.log" | head -50 || true
@@ -84,7 +84,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          pnpm exec eslint src/app/api/admin/reference-tables/route.ts src/app/api/admin/reference-tables/route.test.ts > "$RUNNER_TEMP/gh190-eslint.log" 2>&1
+          pnpm exec eslint src/app/api/admin/reference-tables/route.ts src/app/api/admin/reference-tables/route.test.ts 'src/app/(authenticated)/admin/reference-tables/page.tsx' 'src/app/(authenticated)/admin/reference-tables/page.test.tsx' > "$RUNNER_TEMP/gh190-eslint.log" 2>&1
           status=$?
           echo "ESLint exit: $status" >> "$GITHUB_STEP_SUMMARY"
           grep -E '(^/.*reference-tables/|[0-9]+:[0-9]+.*(error|warning)|✖|error  )' "$RUNNER_TEMP/gh190-eslint.log" | head -40 || true
