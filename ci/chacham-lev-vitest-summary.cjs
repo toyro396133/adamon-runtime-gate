@@ -37,7 +37,14 @@ try {
     const name = String(suite.name || '');
     const relative = name.includes('/source/') ? name.split('/source/').pop() : name.split('/').slice(-2).join('/');
     const messages = [suite.message, ...(suite.assertionResults || []).flatMap(a => a.failureMessages || [])].filter(Boolean).join('\n');
-    console.log('- ' + label + ' failing ID: ' + hash(relative) + ' / ' + classify(messages));
+    const assertions = (suite.assertionResults || []).filter(a => a.status === 'failed');
+    console.log('- ' + label + ' failing ID: ' + hash(relative) + ' / ' + classify(messages) +
+      ' / cases=' + assertions.length);
+    for (const a of assertions.slice(0, 8)) {
+      const failure = (a.failureMessages || []).join('\\n');
+      console.log('- ' + label + ' failing case ID: ' + hash(relative + ':' + String(a.fullName || a.title || '')) +
+        ' / ' + classify(failure));
+    }
   }
   if (bad.length > 25) console.log('- ' + label + ' additional failed suites omitted: ' + (bad.length - 25));
 } catch {
