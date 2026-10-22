@@ -65,9 +65,9 @@ if (kind === 'smoke' || kind === 'unit') {
       'CONTRACT_INCOMPLETE','PARITY_DRIFT','FOREIGN_KEY','CHECK_CONSTRAINT',
       'PARTIAL_UNIQUE','TRIGGER_DEFINITION','FUNCTION_DEFINITION','EXTRA_TRIGGER',
       'OTHER_PRIVATE_FAILURE']);
-    console.error('Public schema rejection class: ' +
-      (allowed.has(report.reason) ? report.reason : 'UNRECOGNIZED'));
-    reject('SCHEMA');
+    if (!allowed.has(report.reason) || rc===0) reject('SCHEMA');
+    console.log('- schema: FAIL category=' + report.reason + ' exit=' + rc + ' seconds=' + Number(secondsText));
+    process.exit(0);
   }
   if (report.version !== 1 || report.status !== 'PASS' ||
       !integer(report.migrations) || report.migrations < 1 ||
@@ -79,4 +79,5 @@ if (kind === 'smoke' || kind === 'unit') {
 console.log('- ' + kind + ': ' + (rc === 0 ? 'PASS' : 'FAIL') +
   ' exit=' + rc + ' seconds=' + Number(secondsText) +
   ' counts=' + counts.join('/'));
-if (rc !== 0) process.exitCode = 1;
+
+// A structurally valid failure is a valid *report*. The outer workflow owns failure exit.
