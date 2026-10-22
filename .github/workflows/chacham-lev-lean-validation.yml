@@ -35,8 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      SOURCE_SHA: ${{ inputs.source_sha || '1bf113c860bd549013b9276a03e8b8ee4a667491' }}
-      TEST_TIER: ${{ github.event_name == 'push' && 'db' || inputs.tier || 'smoke' }}
+      SOURCE_SHA: ${{ inputs.source_sha || 'aec45af6157f72b22107558568230d0a0b6d8fb3' }}
+      TEST_TIER: ${{ github.event_name == 'push' && 'all' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PARENTAL_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
@@ -152,18 +152,14 @@ jobs:
             run_private build pnpm run build
           fi
           if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = schema ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
-            # Classify private synthetic cleanup errors with a fixed-code diagnostic only.
+            # Run unmodified private tests against PostgreSQL clones with all reviewed database guards.
             # The reviewed preparer applies six telephone migrations, including triggers and referential guards.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
               run_private schema-contract node scripts/e2e/verify-reviewed-sql-schema.mjs
               grep -E '^Schema (verification:|parity phase:)' "$RUNNER_TEMP/private-schema-contract.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
               if [ "$last_status" -eq 0 ] && [ "$TEST_TIER" != schema ]; then
-                run_private diagnostic-instrument node "$GITHUB_WORKSPACE/harness/ci/instrument-knowledge.cjs"
-                if [ "$last_status" -eq 0 ]; then
-                  run_private integration pnpm run test:db
-                  grep -E '^SQL suite [0-9]+/[0-9]+: last known cleanup phase=' "$RUNNER_TEMP/private-integration.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
-                fi
+                run_private integration pnpm run test:db
                 grep -E '^SQL suite [0-9]+/[0-9]+: (PASS|FAIL)|^SQL suites: ' "$RUNNER_TEMP/private-integration.log" | tee -a "$GITHUB_STEP_SUMMARY" || true
               fi
             else
