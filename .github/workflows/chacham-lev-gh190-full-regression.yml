@@ -1,0 +1,61 @@
+name: Chacham Lev GH-190 full unit regression
+on:
+  push:
+    branches:
+      - validation/gh-190-reference-tables-20261022
+    paths:
+      - .github/workflows/chacham-lev-gh190-full-regression.yml
+
+permissions:
+  contents: read
+
+jobs:
+  full-vitest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      SOURCE_SHA: 95bf7d6d344b9161b2fc85677d9756ce0b9f1983
+      DATABASE_URL: postgresql://postgres:isolated-only@127.0.0.1:5432/not_used
+      NEXTAUTH_SECRET: isolated-runner-test-secret-do-not-deploy
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Assert existing read-only source token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - name: Checkout exact private PR head
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify source
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install locked dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Execute complete Vitest test suite
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run --reporter=dot --maxWorkers=2 > "$RUNNER_TEMP/full-vitest.log" 2>&1
+          status=$?
+          echo "Full-suite exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '(Test Files |Tests | Duration |^ FAIL |^.*\.test\.[tj]sx? \()' "$RUNNER_TEMP/full-vitest.log" | tail -80 || true
+          exit "$status"
+      - name: Remove private checkout and test logs
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          rm -f -- "$RUNNER_TEMP/full-vitest.log"
