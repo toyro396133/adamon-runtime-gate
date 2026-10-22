@@ -81,7 +81,7 @@ jobs:
           ref: ${{ env.SOURCE_SHA }}
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
           path: source
 
       - name: Verify checkout commit
@@ -143,7 +143,9 @@ jobs:
             run_private unit pnpm exec vitest run --exclude=**/*.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/private-unit.json"
             node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-unit.json" unit | tee -a "$GITHUB_STEP_SUMMARY"
             run_private typecheck pnpm exec tsc --noEmit
-            run_private schema pnpm exec prisma db push --skip-generate
+            # Unlike db push, the reviewed preparer recreates raw SQL triggers and
+            # constraints used by telephone/tenant integration tests.
+            run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
               run_private database-target node scripts/e2e/assert-test-database.mjs
               if [ "$last_status" -eq 0 ]; then
