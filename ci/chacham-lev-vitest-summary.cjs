@@ -50,6 +50,32 @@ function privateLogFingerprint(label) {
   return found.length ? found.join(',') : 'OTHER_LOG_SIGNATURE';
 }
 
+
+function nestedErrorEvidence(node, depth = 0, field = 'root', visited = new Set()) {
+  if (depth > 6 || node == null) return { strings: [], paths: [] };
+  if (typeof node === 'string') {
+    if (/error|message|failure|reason|stack/i.test(field)) return { strings: [node], paths: [field + ':string'] };
+    return { strings: [], paths: [] };
+  }
+  if (typeof node !== 'object' || visited.has(node)) return { strings: [], paths: [] };
+  visited.add(node);
+  const out = { strings: [], paths: [] };
+  const entries = Array.isArray(node) ? node.map((value, i) => [String(i), value]) : Object.entries(node);
+  for (const [key, value] of entries) {
+    if (out.strings.length >= 60 || out.paths.length >= 60) break;
+    const path = field + '.' + (Array.isArray(node) ? 'item' : key);
+    if (typeof value === 'string' && /error|message|failure|reason|stack/i.test(path)) {
+      out.strings.push(value);
+      out.paths.push(path + ':string');
+    } else if (typeof value === 'object' && value !== null) {
+      const nested = nestedErrorEvidence(value, depth + 1, path, visited);
+      out.strings.push(...nested.strings);
+      out.paths.push(...nested.paths);
+    }
+  }
+  return out;
+}
+
 function classify(text) {
   if (/P20\d{2}|P10\d{2}/.test(text)) return 'DATABASE_PRISMA';
   if (/relation .* does not exist|column .* does not exist|unknown field|unknown argument/i.test(text)) return 'SCHEMA';
@@ -78,8 +104,11 @@ try {
   for (const suite of bad.slice(0, 25)) {
     const name = String(suite.name || '');
     const relative = name.includes('/source/') ? name.split('/source/').pop() : name.split('/').slice(-2).join('/');
+    const nested = nestedErrorEvidence(suite);
     const messages = [suite.message, suite.failureMessage, suite.errorMessage,
-      ...(suite.assertionResults || []).flatMap(a => a.failureMessages || [])].filter(Boolean).join('\n');
+      ...nested.strings].filter(Boolean).join('\n');
+    console.log('- ' + label + ' error field paths: ' + [...new Set(nested.paths)].slice(0, 12).join(','));
+
     const assertions = (suite.assertionResults || []).filter(a => a.status === 'failed');
     console.log('- ' + label + ' failing ID: ' + hash(relative) + ' / ' + classify(messages) +
       ' / cases=' + assertions.length + ' / ' + safeSignature(messages));
