@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PRIVATE_SOURCE_SHA: 67ab257a01281d00bf63591673eb9cfcf3c10bb9
+  PRIVATE_SOURCE_SHA: ae873c75847ce5fe4f0e080f1d355c0b5841c739
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
   DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_android_e2e
@@ -51,7 +51,7 @@ jobs:
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 0
-          ref: 67ab257a01281d00bf63591673eb9cfcf3c10bb9
+          ref: ae873c75847ce5fe4f0e080f1d355c0b5841c739
           path: source
 
       - name: Verify pinned source and isolated E2E-only build type
@@ -92,9 +92,12 @@ jobs:
       - name: Generate disposable credentials
         shell: bash
         run: |
-          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          auth_secret="$(openssl rand -hex 32)"
+          user_password="$(openssl rand -hex 16)"
+          echo "::add-mask::$auth_secret"
+          echo "::add-mask::$user_password"
+          printf 'NEXTAUTH_SECRET=%s\nAUTH_SECRET=%s\nE2E_TEST_PASSWORD=%s\n' \
+            "$auth_secret" "$auth_secret" "$user_password" >> "$GITHUB_ENV"
 
       - name: Install source dependencies (private runner)
         working-directory: source
