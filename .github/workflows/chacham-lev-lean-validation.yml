@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      SOURCE_SHA: ${{ inputs.source_sha || '4caa56eb9c5b478e6b6328b3b88e3821b7da149e' }}
+      SOURCE_SHA: ${{ inputs.source_sha || 'a22cb14530df66db9c8b232048483c036400087d' }}
       TEST_TIER: ${{ github.event_name == 'push' && 'all' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
