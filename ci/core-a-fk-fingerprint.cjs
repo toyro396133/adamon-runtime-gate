@@ -26,6 +26,16 @@ function quote(s){return '"' + String(s).replace(/"/g,'""') + '"';}
       try{const count=(await db.query(q)).rows[0].n;if(count>0)matches.push({id:hash(row.rel),count});}
       catch{/* never log SQL text or a private table name */}
     }
+    const tenancy=(await db.query(
+      'SELECT count(*) FILTER (WHERE c."tenantId"=p."tenantId")::int AS matching, '+
+      'count(*) FILTER (WHERE c."tenantId"<>p."tenantId")::int AS mismatching '+
+      'FROM "ContactCoordination" c JOIN "Person" p ON p.id=c."personId" '+
+      'WHERE p."tenantId" LIKE \'core-a-%\''
+    )).rows[0];
+    const guard=(await db.query(
+      'SELECT count(*)::int AS n FROM pg_trigger WHERE tgname=\'scope_ContactCoordination\' AND NOT tgisinternal'
+    )).rows[0].n;
     console.log('Core A synthetic Person FK blockers: '+JSON.stringify(matches));
+    console.log('Core A ContactCoordination synthetic scope: '+JSON.stringify({matching:tenancy.matching,mismatching:tenancy.mismatching,guardPresent:guard>0}));
   }finally{await db.end();}
 })().catch(()=>{console.log('Core A FK fingerprint UNAVAILABLE');process.exitCode=1;});
