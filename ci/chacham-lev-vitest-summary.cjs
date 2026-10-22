@@ -9,6 +9,16 @@ function hash(input) {
   }
   return h.toString(16).padStart(8, '0');
 }
+function safeSignature(text) {
+  const types = ['PrismaClientKnownRequestError', 'PrismaClientUnknownRequestError',
+    'PrismaClientValidationError', 'PrismaClientInitializationError',
+    'TypeError', 'ReferenceError', 'SyntaxError', 'AssertionError', 'AggregateError'];
+  const type = types.find(name => text.includes(name)) || 'UNCLASSIFIED';
+  const codes = [...new Set(text.match(/\\bP[123]\\d{3}\\b/g) || [])].slice(0, 3);
+  const stage = /beforeAll/i.test(text) ? 'BEFORE_ALL'
+    : /afterAll/i.test(text) ? 'AFTER_ALL' : 'UNKNOWN_STAGE';
+  return [type, stage, ...(codes.length ? codes : ['NO_PRISMA_CODE'])].join('/');
+}
 function classify(text) {
   if (/P20\d{2}|P10\d{2}/.test(text)) return 'DATABASE_PRISMA';
   if (/relation .* does not exist|column .* does not exist|unknown field|unknown argument/i.test(text)) return 'SCHEMA';
@@ -39,7 +49,7 @@ try {
     const messages = [suite.message, ...(suite.assertionResults || []).flatMap(a => a.failureMessages || [])].filter(Boolean).join('\n');
     const assertions = (suite.assertionResults || []).filter(a => a.status === 'failed');
     console.log('- ' + label + ' failing ID: ' + hash(relative) + ' / ' + classify(messages) +
-      ' / cases=' + assertions.length);
+      ' / cases=' + assertions.length + ' / ' + safeSignature(messages));
     for (const a of assertions.slice(0, 8)) {
       const failure = (a.failureMessages || []).join('\\n');
       console.log('- ' + label + ' failing case ID: ' + hash(relative + ':' + String(a.fullName || a.title || '')) +
