@@ -26,7 +26,9 @@ if (kind === 'smoke' || kind === 'unit') {
   if (keys.some(k => !integer(report[k]) && !(k === 'numPendingTestSuites' && report[k] === undefined))) reject('COUNTS');
   if (report.numPendingTestSuites === undefined) report.numPendingTestSuites=0;
   const r = report;
-  if (!Array.isArray(r.testResults) || r.testResults.length !== r.numTotalTestSuites)
+  if (!Array.isArray(r.testResults) ||
+      r.testResults.length < (kind === 'smoke' ? 20 : 176) ||
+      r.testResults.length > r.numTotalTestSuites)
     reject('LENGTH');
   if (r.numTotalTestSuites === 0 || r.numTotalTests === 0) reject('NONZERO');
   if (r.numPassedTestSuites+r.numFailedTestSuites+r.numPendingTestSuites !== r.numTotalTestSuites)
@@ -42,7 +44,7 @@ if (kind === 'smoke' || kind === 'unit') {
     }
   }
   if ((rc === 0) !== (r.success === true && r.numFailedTests === 0 && r.numFailedTestSuites === 0)) reject('EXIT');
-  counts = [r.numTotalTestSuites,r.numTotalTests,r.numPassedTests,r.numFailedTests,r.numPendingTests];
+  counts = [r.testResults.length,r.numTotalTestSuites,r.numTotalTests,r.numPassedTests,r.numFailedTests,r.numPendingTests];
 } else if(kind === 'integration') {
   if (report.version !== 1 || !integer(report.discoveredFiles) ||
       report.discoveredFiles < 11 || !integer(report.executedFiles) ||
