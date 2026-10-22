@@ -207,6 +207,8 @@ jobs:
               echo "- Tier: $TEST_TIER"
               cat "$public"
             } >> "$GITHUB_STEP_SUMMARY"
+            # Print only the trusted summary, after validation is complete.
+            cat "$public"
           else
             echo '## Chacham Lev: public evidence rejected; no partial results published' >> "$GITHUB_STEP_SUMMARY"
           fi
