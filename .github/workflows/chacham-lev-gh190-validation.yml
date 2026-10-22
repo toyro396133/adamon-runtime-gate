@@ -1,0 +1,98 @@
+name: Chacham Lev GH-190 targeted validation
+
+on:
+  push:
+    branches:
+      - validation/gh-190-reference-tables-20261022
+    paths:
+      - .github/workflows/chacham-lev-gh190-validation.yml
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: 95bf7d6d344b9161b2fc85677d9756ce0b9f1983
+  NEXT_TELEMETRY_DISABLED: '1'
+  NODE_OPTIONS: --max-old-space-size=4096
+  DATABASE_URL: postgresql://postgres:isolated-only@127.0.0.1:5432/not_used
+  NEXTAUTH_SECRET: isolated-runner-test-secret-do-not-deploy
+
+jobs:
+  reference-tables:
+    name: Isolated Vitest / Typecheck / ESLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Require private source read secret
+        shell: bash
+        env:
+          SOURCE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          if [[ -z "$SOURCE_TOKEN" ]]; then
+            echo "::error::Missing CHACHAM_LEV_READ_TOKEN (secret value not printed)"
+            exit 2
+          fi
+      - name: Checkout pinned private source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: source
+          fetch-depth: 1
+      - name: Verify pinned source
+        working-directory: source
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "Verified private source at $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install locked dependencies
+        working-directory: source
+        shell: bash
+        run: pnpm install --frozen-lockfile
+      - name: Run focused Vitest regression suite
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/app/api/admin/reference-tables/route.test.ts --reporter=dot > "$RUNNER_TEMP/gh190-vitest.log" 2>&1
+          status=$?
+          echo "Vitest exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^( FAIL | Test Files | Tests | Duration |.*reference-tables/route.test.ts|.*AssertionError|.*Error:)' "$RUNNER_TEMP/gh190-vitest.log" | head -50 || true
+          exit "$status"
+      - name: Run full TypeScript no-emit validation
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec tsc --noEmit > "$RUNNER_TEMP/gh190-tsc.log" 2>&1
+          status=$?
+          echo "Typecheck exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^([^ ]+\([0-9]+,[0-9]+\): error TS[0-9]+|error TS[0-9]+)' "$RUNNER_TEMP/gh190-tsc.log" | head -40 || true
+          exit "$status"
+      - name: Run targeted ESLint
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec eslint src/app/api/admin/reference-tables/route.ts src/app/api/admin/reference-tables/route.test.ts > "$RUNNER_TEMP/gh190-eslint.log" 2>&1
+          status=$?
+          echo "ESLint exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '(^/.*reference-tables/|[0-9]+:[0-9]+.*(error|warning)|✖|error  )' "$RUNNER_TEMP/gh190-eslint.log" | head -40 || true
+          exit "$status"
+      - name: Erase private source and temporary outputs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          rm -f -- "$RUNNER_TEMP/gh190-vitest.log" "$RUNNER_TEMP/gh190-tsc.log" "$RUNNER_TEMP/gh190-eslint.log"
+          echo "Private source and raw test logs deleted from the runner." >> "$GITHUB_STEP_SUMMARY"
