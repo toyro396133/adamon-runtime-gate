@@ -64,6 +64,7 @@ jobs:
         working-directory: source
         shell: bash
         run: |
+          set +e
           set -uo pipefail
           node scripts/door-to-door/upgrade-rehearsal.cjs > "$RUNNER_TEMP/fin-schema.log" 2>&1
           echo "FIN_SCHEMA_RC=$?"
