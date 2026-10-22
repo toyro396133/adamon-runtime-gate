@@ -6,7 +6,7 @@ const kinds = new Set(['smoke','unit','integration','schema']);
 const [kind, file, exitText, secondsText] = process.argv.slice(2);
 const integer = (v, max = 1000000) => Number.isSafeInteger(v) && v >= 0 && v <= max;
 function reject(reason='STRUCTURE') {
-  const code=['STRUCTURE','INPUT','MISSING','COUNTS','SUITES','CASES','EXIT','SCHEMA','CLONES'].includes(reason)?reason:'STRUCTURE';
+  const code=['STRUCTURE','INPUT','MISSING','COUNTS','SUITES','CASES','EXIT','SCHEMA','CLONES','LENGTH','SUITE_SUM','CASE_SUM','SUCCESS_BOOL','NONZERO'].includes(reason)?reason:'STRUCTURE';
   console.error('Public evidence rejected: ' + code);
   process.exit(2);
 }
@@ -26,12 +26,14 @@ if (kind === 'smoke' || kind === 'unit') {
   if (keys.some(k => !integer(report[k]) && !(k === 'numPendingTestSuites' && report[k] === undefined))) reject('COUNTS');
   if (report.numPendingTestSuites === undefined) report.numPendingTestSuites=0;
   const r = report;
-  if (!Array.isArray(r.testResults) ||
-      r.testResults.length !== r.numTotalTestSuites ||
-      r.numTotalTestSuites === 0 || r.numTotalTests === 0 ||
-      r.numPassedTestSuites+r.numFailedTestSuites+r.numPendingTestSuites !== r.numTotalTestSuites ||
-      r.numPassedTests+r.numFailedTests+r.numPendingTests !== r.numTotalTests ||
-      typeof r.success !== 'boolean') reject('SUITES');
+  if (!Array.isArray(r.testResults) || r.testResults.length !== r.numTotalTestSuites)
+    reject('LENGTH');
+  if (r.numTotalTestSuites === 0 || r.numTotalTests === 0) reject('NONZERO');
+  if (r.numPassedTestSuites+r.numFailedTestSuites+r.numPendingTestSuites !== r.numTotalTestSuites)
+    reject('SUITE_SUM');
+  if (r.numPassedTests+r.numFailedTests+r.numPendingTests+(r.numTodoTests || 0) !== r.numTotalTests)
+    reject('CASE_SUM');
+  if (typeof r.success !== 'boolean') reject('SUCCESS_BOOL');
   for (const suite of r.testResults) {
     if (!suite || !['passed','failed','pending'].includes(suite.status) ||
         !Array.isArray(suite.assertionResults)) reject('SUITES');
