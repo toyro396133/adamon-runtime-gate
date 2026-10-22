@@ -59,3 +59,12 @@ All database tests use a fresh PostgreSQL 18 service inside the job, never
 production or Neon. Only status, runtime, aggregate counts and anonymous failing suite IDs/categories appear in the public summary.
 A failure is **not** a PASS; private diagnostics are intentionally not
 available from the public Actions log. Treat the full E2E workflow separately.
+
+
+### Chacham Lev public evidence hardening (October 22, 2026)
+
+The live acceptance workflow now uses `ci/chacham-lev-public-gate.cjs` to validate structured reports. No source stdout/stderr lines are forwarded. Structural errors, absent reports, unsuccessful stage exits and clone-cleanup failures must fail the job. `ci/chacham-lev-public-gate.test.cjs` uses synthetic secret-like strings for negative leak tests. Public PostgreSQL service logging is hardened before loading private code and its published host port is loopback-only.
+
+Database reconstruction is an explicitly bounded **pinned historical snapshot plus approved SQL upgrades**, not a replay of all historical data migrations and not an E2E acceptance test. The independent SQL migration manifest is in the private source. The workflow also executes deliberate SQL failure cases only against temporary loopback PostgreSQL clones. Do not use a green run against an older private SHA as approval for a newer commit.
+
+The fine-grained permissions of `CHACHAM_LEV_READ_TOKEN` must be verified in the token issuer/repository settings; the Actions job's own `contents: read` scope does **not** prove the secret's scopes. The source is not published; privately retained diagnostics are deleted after the job. Keep both PRs Draft until a separate review accepts a pinned full run and the negative tests.
