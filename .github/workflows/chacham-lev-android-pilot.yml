@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  PRIVATE_SOURCE_SHA: d731384b699a48da96d40197de3968b7cf3f7a9d
+  PRIVATE_SOURCE_SHA: a57babf8262f4b6754c1ed1850ef37aa7faf1136
 
 jobs:
   build-android-pilot:
@@ -29,7 +29,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: d731384b699a48da96d40197de3968b7cf3f7a9d
+          ref: a57babf8262f4b6754c1ed1850ef37aa7faf1136
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
