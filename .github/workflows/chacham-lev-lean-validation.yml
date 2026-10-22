@@ -34,7 +34,7 @@ jobs:
     timeout-minutes: 40
     env:
       SOURCE_SHA: ${{ inputs.source_sha || 'd75a9be1551bdfb686810a929c3f753831436e1b' }}
-      TEST_TIER: ${{ github.event_name == 'push' && 'all' || inputs.tier || 'smoke' }}
+      TEST_TIER: ${{ github.event_name == 'push' && 'full' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       AUD1210_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
@@ -67,6 +67,12 @@ jobs:
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "::error::Invalid source SHA"; exit 2; }
           [[ "$TEST_TIER" == smoke || "$TEST_TIER" == full || "$TEST_TIER" == all ]] || { echo "::error::Invalid tier"; exit 2; }
           test -n "$READ_TOKEN" || { echo "::error::Missing read-only private source access"; exit 2; }
+
+      - name: Checkout public summary helper
+        uses: actions/checkout@v4
+        with:
+          path: harness
+          persist-credentials: false
 
       - name: Checkout exact private source in ephemeral workspace
         uses: actions/checkout@v4
@@ -134,11 +140,16 @@ jobs:
           fi
 
           if [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
-            run_private unit pnpm run test
+            run_private unit pnpm exec vitest run --exclude=**/*.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/private-unit.json"
+            node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-unit.json" unit >> "$GITHUB_STEP_SUMMARY"
             run_private typecheck pnpm exec tsc --noEmit
             run_private schema pnpm exec prisma db push --skip-generate
             if [ "$last_status" -eq 0 ]; then
-              run_private integration pnpm run test:db
+              run_private database-target node scripts/e2e/assert-test-database.mjs
+              if [ "$last_status" -eq 0 ]; then
+                run_private integration pnpm exec vitest run integration.test.ts --no-file-parallelism --reporter=json --outputFile="$RUNNER_TEMP/private-integration.json"
+                node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-integration.json" integration >> "$GITHUB_STEP_SUMMARY"
+              fi
             else
               echo "- integration: BLOCKED (schema setup failed)" >> "$GITHUB_STEP_SUMMARY"
             fi
@@ -149,5 +160,5 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -rf -- "$GITHUB_WORKSPACE/source"
-          find "$RUNNER_TEMP" -maxdepth 1 -type f -name 'private-*.log' -delete
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/harness"
+          find "$RUNNER_TEMP" -maxdepth 1 -type f \( -name 'private-*.log' -o -name 'private-*.json' \) -delete
