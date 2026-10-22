@@ -177,6 +177,9 @@ jobs:
                   # The corea option adds only ephemeral fixture-stage markers; other modes use pristine source.
                   run_private "integration-$count" pnpm exec vitest run "$suite" --no-file-parallelism --reporter=json --outputFile="$RUNNER_TEMP/private-integration-$count.json"
                   node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-integration-$count.json" "integration-$count" | tee -a "$GITHUB_STEP_SUMMARY"
+                  if [ "$TEST_TIER" = corea ]; then
+                    node "$GITHUB_WORKSPACE/harness/ci/core-a-fk-fingerprint.cjs" | tee -a "$GITHUB_STEP_SUMMARY"
+                  fi
                 done < <(find src -type f -name '*.integration.test.ts' -print0 | sort -z)
                 if [ "$count" -eq 0 ]; then
                   echo "::error::No SQL integration suites were discovered"
