@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      SOURCE_SHA: ${{ inputs.source_sha || '850ea7680b1f86f22df6c804dfb14ace07852f80' }}
+      SOURCE_SHA: ${{ inputs.source_sha || '1bf113c860bd549013b9276a03e8b8ee4a667491' }}
       TEST_TIER: ${{ github.event_name == 'push' && 'db' || inputs.tier || 'smoke' }}
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_test
@@ -152,7 +152,7 @@ jobs:
             run_private build pnpm run build
           fi
           if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = schema ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
-            # Use SQL migrations, never just Prisma db push; emit only fixed-category setup errors.
+            # Replay reviewed SQL migrations and classify fixture cleanup without printing private logs.
             # The reviewed preparer applies six telephone migrations, including triggers.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
