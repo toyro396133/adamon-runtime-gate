@@ -44,7 +44,7 @@ if (kind === 'smoke' || kind === 'unit') {
     }
   }
   if ((rc === 0) !== (r.success === true && r.numFailedTests === 0 && r.numFailedTestSuites === 0)) reject('EXIT');
-  counts = [r.testResults.length,r.numTotalTestSuites,r.numTotalTests,r.numPassedTests,r.numFailedTests,r.numPendingTests];
+  counts = [r.testResults.length,r.numTotalTestSuites,r.numPassedTestSuites,r.numFailedTestSuites,r.numTotalTests,r.numPassedTests,r.numFailedTests,r.numPendingTests];
 } else if(kind === 'integration') {
   if (report.version !== 1 || !integer(report.discoveredFiles) ||
       report.discoveredFiles < 11 || !integer(report.executedFiles) ||
@@ -64,7 +64,7 @@ if (kind === 'smoke' || kind === 'unit') {
     const allowed = new Set(['MANIFEST_INVALID','MANIFEST_INVENTORY','MANIFEST_HASH',
       'CONTRACT_INCOMPLETE','PARITY_DRIFT','FOREIGN_KEY','CHECK_CONSTRAINT',
       'PARTIAL_UNIQUE','TRIGGER_DEFINITION','FUNCTION_DEFINITION','EXTRA_TRIGGER',
-      'OTHER_PRIVATE_FAILURE']);
+      'OTHER_PRIVATE_FAILURE','FK_MISSING','FK_UNVALIDATED','FK_DEFERRABLE','FK_TARGET','FK_COLUMNS','FK_ACTION','CHECK_DEFINITION']);
     if (!allowed.has(report.reason) || rc===0) reject('SCHEMA');
     console.log('- schema: FAIL category=' + report.reason + ' exit=' + rc + ' seconds=' + Number(secondsText));
     process.exit(0);
