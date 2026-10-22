@@ -1,0 +1,51 @@
+name: IMPORT-V2 pinned source audit (GH-196)
+on:
+  push:
+    branches: [validation/import-v2-5786-20261022]
+    paths: [.github/workflows/import-v2-5786-source.yml]
+permissions:
+  contents: read
+concurrency:
+  group: import-v2-5786-source
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Require existing private source read token
+        env:
+          SOURCE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$SOURCE_TOKEN" || { echo 'ENVIRONMENT missing read token'; exit 2; }
+      - name: Checkout immutable private source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: d4c1af0d648de9f4884bd4f43e322cb1656e9330
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify exact source and source tree
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "d4c1af0d648de9f4884bd4f43e322cb1656e9330"
+          test "$(git rev-parse HEAD:apps/active/Tables)" = "20ef11703f902b4cba9cdc607ce0003e8c3d9a54"
+          mkdir -p "$RUNNER_TEMP/import-v2-private"
+          echo "Code source d4c1af0d648de9f4884bd4f43e322cb1656e9330; source tree pinned; read only; no database." >> "$GITHUB_STEP_SUMMARY"
+      - name: Strict parser and year isolation contract tests
+        working-directory: source
+        run: |
+          python -m unittest discover -s tests/import-v2 > "$RUNNER_TEMP/import-v2-private/tests.log" 2>&1
+          echo "Parser contract tests PASS (8)." >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify all 55 raw sources and publish aggregate year impact only
+        working-directory: source
+        run: |
+          python scripts/import-v2/audit_source.py --source-root apps/active --output "$RUNNER_TEMP/import-v2-private/metadata.json" > "$RUNNER_TEMP/import-v2-private/result.json"
+          cat "$RUNNER_TEMP/import-v2-private/result.json"
+          cat "$RUNNER_TEMP/import-v2-private/result.json" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove private source and outputs
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$RUNNER_TEMP/import-v2-private"
+          echo "Private source and raw output removed; no artifacts uploaded." >> "$GITHUB_STEP_SUMMARY"
