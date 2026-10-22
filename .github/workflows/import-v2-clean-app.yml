@@ -9,7 +9,7 @@ concurrency:
   group: import-v2-clean-app
   cancel-in-progress: false
 env:
-  SOURCE_SHA: 00c659ed0757b436f2559cf73228c381769c0387
+  SOURCE_SHA: bc8091ebbd1044913981c9704528f0fc6b2130c6
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
 jobs:
@@ -95,7 +95,7 @@ jobs:
           import json, os
           from pathlib import Path
           lines = (Path(os.environ['RUNNER_TEMP'])/'import-v2-app-private/result.json').read_text().splitlines()
-          allowed = {'status','stage','pages_verified','environment','real_credentials_logins',
+          allowed = {'status','stage','code','pages_verified','environment','real_credentials_logins',
                      'original_protected_accounts_tested','reference_api_reads','tenant_isolation',
                      'fixture_accounts_unchanged','business_rows_created_by_read_flow'}
           reports = []
