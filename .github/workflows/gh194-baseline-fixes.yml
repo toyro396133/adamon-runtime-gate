@@ -1,0 +1,85 @@
+name: GH-194 restore full Vitest baseline
+on:
+  push:
+    branches:
+      - validation/gh-190-reference-tables-20261022
+    paths:
+      - .github/workflows/gh194-baseline-fixes.yml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 28
+    env:
+      SOURCE_SHA: 587ff85bfcbcc8f0795d366a79548fa7619bef0a
+      DATABASE_URL: postgresql://postgres:isolated@127.0.0.1:5432/not_used
+      NEXTAUTH_SECRET: isolated-test-secret
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Require private source read secret
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: source
+          fetch-depth: 1
+      - name: Verify pinned source SHA
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install frozen deps
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Run complete regular Vitest suite, capture short test details
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run --reporter=dot --maxWorkers=2 > "$RUNNER_TEMP/gh194-full.log" 2>&1
+          status=$?
+          echo "Vitest exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          sed -E 's/\x1b\[[0-9;]*[[:alpha:]]//g' "$RUNNER_TEMP/gh194-full.log" | grep -E '^( FAIL | Test Files |      Tests |.*Error:|.*AssertionError)' | tail -65 || true
+          exit "$status"
+      - name: Run TypeScript typecheck
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec tsc --noEmit > "$RUNNER_TEMP/gh194-types.log" 2>&1
+          status=$?
+          echo "Typecheck exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          grep -E 'error TS[0-9]+' "$RUNNER_TEMP/gh194-types.log" | head -40 || true
+          exit "$status"
+      - name: Run ESLint on all changed tests
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec eslint \
+            'src/app/(authenticated)/assignments/page.test.tsx' \
+            'src/app/(authenticated)/google-maps-settings/page.test.ts' \
+            'src/app/(authenticated)/admin/receipts/page.test.tsx' \
+            'src/actions/routingActions.test.ts' \
+            'src/actions/analyticsActions.test.ts' > "$RUNNER_TEMP/gh194-eslint.log" 2>&1
+          status=$?
+          echo "ESLint exit: $status" >> "$GITHUB_STEP_SUMMARY"
+          tail -35 "$RUNNER_TEMP/gh194-eslint.log" || true
+          exit "$status"
+      - name: Remove ephemeral private source and raw logs
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          rm -f -- "$RUNNER_TEMP/gh194-full.log" "$RUNNER_TEMP/gh194-types.log" "$RUNNER_TEMP/gh194-eslint.log"
