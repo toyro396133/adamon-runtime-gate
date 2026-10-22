@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 9aae3f476b014b044101c821229d131ec0c629c4
+          ref: 4e5fb99864b75fcb5029678204f9dafc3dc1eecf
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
@@ -44,10 +44,10 @@ jobs:
       - name: Verify exact source and source tree
         working-directory: source
         run: |
-          test "$(git rev-parse HEAD)" = "9aae3f476b014b044101c821229d131ec0c629c4"
+          test "$(git rev-parse HEAD)" = "4e5fb99864b75fcb5029678204f9dafc3dc1eecf"
           test "$(git rev-parse HEAD:apps/active/Tables)" = "20ef11703f902b4cba9cdc607ce0003e8c3d9a54"
           mkdir -p "$RUNNER_TEMP/import-v2-private"
-          echo "Code source 9aae3f476b014b044101c821229d131ec0c629c4; source tree pinned; read only; no database." >> "$GITHUB_STEP_SUMMARY"
+          echo "Code source 4e5fb99864b75fcb5029678204f9dafc3dc1eecf; source tree pinned; read only; no database." >> "$GITHUB_STEP_SUMMARY"
       - name: Strict parser and year isolation contract tests
         working-directory: source
         run: |
@@ -55,7 +55,7 @@ jobs:
           import io, os, unittest
           suite = unittest.defaultTestLoader.discover('tests/import-v2')
           result = unittest.TextTestRunner(stream=io.StringIO()).run(suite)
-          complete = result.wasSuccessful() and result.testsRun == 12 and not result.skipped
+          complete = result.wasSuccessful() and result.testsRun == 24 and not result.skipped
           line = f"Source/staging contracts: run={result.testsRun}, failed={len(result.failures)}, errors={len(result.errors)}, skipped={len(result.skipped)}, complete={complete}"
           print(line)
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
