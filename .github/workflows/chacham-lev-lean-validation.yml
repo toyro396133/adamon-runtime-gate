@@ -153,7 +153,7 @@ jobs:
           fi
           if [ "$TEST_TIER" = db ] || [ "$TEST_TIER" = schema ] || [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
             # Replay reviewed SQL migrations and classify fixture cleanup without printing private logs.
-            # The reviewed preparer applies six telephone migrations, including triggers.
+            # The reviewed preparer applies six telephone migrations, including triggers and referential guards.
             run_private schema pnpm exec tsx scripts/e2e/prepare-mobile-database.ts
             if [ "$last_status" -eq 0 ]; then
               run_private schema-contract node scripts/e2e/verify-reviewed-sql-schema.mjs
