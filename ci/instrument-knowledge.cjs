@@ -26,7 +26,10 @@ const queryCleanupDependencies = [
 "        process.stderr.write('KNOWLEDGE_BLOCKER_'+tag+'_'+found[0].n+'\\n');",
 "      }",
 "    }",
-"  } catch {process.stderr.write('KNOWLEDGE_BLOCKER_DIAG_ERROR\\n');}",
+"  } catch (error) {",
+"    const code=typeof error?.code==='string'&&/^[A-Z0-9]{2,6}$/.test(error.code)?error.code:'UNKNOWN';",
+"    process.stderr.write('KNOWLEDGE_BLOCKER_DIAG_ERROR_'+code+'\\n');",
+"  }",
 ].join("\n") + "\n  ";
 
 const steps=[
@@ -62,7 +65,7 @@ const runner='scripts/e2e/run-isolated-sql-suites.mjs';
 let runnerSource=fs.readFileSync(runner,'utf8');
 const anchor="if (phases.length) console.error('SQL suite ' + (index + 1) + '/' + suites.length + ': last known cleanup phase=' + phases.at(-1));";
 if(!runnerSource.includes(anchor))throw Error('SQL cleanup reporter contract changed');
-runnerSource=runnerSource.replace(anchor,anchor+"\n        const refs=[...hidden.matchAll(/KNOWLEDGE_BLOCKER_([a-f0-9]{8})_([0-9]{1,5})/g)].map(m=>m[1]+':'+m[2]);\n        if(refs.length)console.error('SQL suite '+(index+1)+'/'+suites.length+': anonymous blocker counts='+refs.join(','));");
+runnerSource=runnerSource.replace(anchor,anchor+"\n        const refs=[...hidden.matchAll(/KNOWLEDGE_BLOCKER_([a-f0-9]{8})_([0-9]{1,5})/g)].map(m=>m[1]+':'+m[2]);\n        if(refs.length)console.error('SQL suite '+(index+1)+'/'+suites.length+': anonymous blocker counts='+refs.join(','));\n        const diag=[...hidden.matchAll(/KNOWLEDGE_BLOCKER_DIAG_ERROR_([A-Z0-9]{2,8})/g)].map(m=>m[1]);\n        if(diag.length)console.error('SQL suite '+(index+1)+'/'+suites.length+': blocker introspection error='+diag.at(-1));");
 fs.writeFileSync(runner,runnerSource);
 fs.writeFileSync(path,s);
 console.log('Knowledge teardown diagnostic markers applied to ephemeral checkout only.');
