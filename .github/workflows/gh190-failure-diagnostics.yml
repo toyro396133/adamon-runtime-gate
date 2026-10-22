@@ -1,0 +1,84 @@
+name: GH-190 baseline failure classification
+on:
+  push:
+    branches:
+      - validation/gh-190-reference-tables-20261022
+    paths:
+      - .github/workflows/gh190-failure-diagnostics.yml
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SOURCE_SHA: e48ee84b8635bd39c8b44ce1b817648da123ce20
+      DATABASE_URL: postgresql://postgres:isolated-only@127.0.0.1:5432/not_used
+      NEXTAUTH_SECRET: isolated-runner-test-secret-do-not-deploy
+    steps:
+      - name: Assert private source read credential
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify source
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install locked dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Run only five previously failing test files, capturing structured diagnostics
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run \
+            'src/app/(authenticated)/google-maps-settings/page.test.ts' \
+            'src/actions/analyticsActions.test.ts' \
+            'src/actions/routingActions.test.ts' \
+            'src/app/(authenticated)/assignments/page.test.tsx' \
+            'src/app/(authenticated)/admin/receipts/page.test.tsx' \
+            --maxWorkers=2 --reporter=json --outputFile="$RUNNER_TEMP/gh190-diagnostics.json" \
+            > "$RUNNER_TEMP/gh190-diagnostics-raw.log" 2>&1
+          status=$?
+          set -e
+          echo "Five-suite diagnostic Vitest exit: $status"
+          node --input-type=commonjs <<'NODE'
+          const fs=require('fs');
+          const p=process.env.RUNNER_TEMP+'/gh190-diagnostics.json';
+          if(!fs.existsSync(p)){console.log('No structured test report.'); process.exit(0);}
+          const o=JSON.parse(fs.readFileSync(p,'utf8'));
+          console.log('SUMMARY',JSON.stringify({total:o.numTotalTests,passed:o.numPassedTests,failed:o.numFailedTests,suites:o.numTotalTestSuites,failedSuites:o.numFailedTestSuites}));
+          for (const s of o.testResults??[]) {
+            if(s.status==='passed') continue;
+            const path=s.name.split('/source/').pop();
+            console.log('FAILED SUITE:',path);
+            let n=0;
+            for(const a of s.assertionResults??[]){
+              if(a.status!=='failed')continue;
+              n++;
+              console.log('  TEST:',(a.fullName||a.title||'').slice(0,220));
+              let msg=String(a.failureMessages?.[0]||'').replace(/\x1b\[[0-9;]*m/g,'').split('\n').filter(v=>!/^\s*(?:at |\d+\s*\||\>|\^)/.test(v)).slice(0,14).join(' ').slice(0,750);
+              console.log('  FAILURE:',msg);
+            }
+            if(n===0)console.log('  SUITE ERROR:',String(s.message||'').replace(/\x1b\[[0-9;]*m/g,'').split('\n').slice(0,5).join(' ').slice(0,850));
+          }
+          NODE
+      - name: Erase private checkout and raw output
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          rm -f -- "$RUNNER_TEMP/gh190-diagnostics.json" "$RUNNER_TEMP/gh190-diagnostics-raw.log"
