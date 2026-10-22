@@ -14,7 +14,7 @@ function safeSignature(text) {
     'PrismaClientValidationError', 'PrismaClientInitializationError',
     'TypeError', 'ReferenceError', 'SyntaxError', 'AssertionError', 'AggregateError'];
   const type = types.find(name => text.includes(name)) || 'UNCLASSIFIED';
-  const codes = [...new Set(text.match(/\\bP[123]\\d{3}\\b/g) || [])].slice(0, 3);
+  const codes = [...new Set(text.match(/\bP[123]\d{3}\b/g) || [])].slice(0, 3);
   const stage = /beforeAll/i.test(text) ? 'BEFORE_ALL'
     : /afterAll/i.test(text) ? 'AFTER_ALL' : 'UNKNOWN_STAGE';
   return [type, stage, ...(codes.length ? codes : ['NO_PRISMA_CODE'])].join('/');
