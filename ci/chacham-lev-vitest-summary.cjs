@@ -48,6 +48,8 @@ function privateLogFingerprint(label) {
   };
   const marker = [...raw.matchAll(/CORE_A_PHASE_(TENANT|USER|CAMPAIGN|PERSON|READY)/g)].map(m => m[1]).at(-1);
   if (marker) console.log('- ' + label + ' Core A last setup stage: ' + marker);
+  const cleanup = [...raw.matchAll(/CORE_A_CLEANUP_(AUDIT|DONATIONS|PERSON_LINK|PERSON_LINK_EVENT|STUDENT_ASSIGN_EVENT|STUDENT_ASSIGN|ROUTE_DONOR|ROUTE_CAMPAIGN|ROUTE|GROUP|ADDRESS|PERSON|CAMPAIGN|USER|TENANT|DISCONNECT)/g)].map(m => m[1]);
+  if (cleanup.length) console.log('- ' + label + ' Core A last teardown stage: ' + cleanup.at(-1));
   const found = Object.entries(marks).filter(([, regex]) => regex.test(raw)).map(([k]) => k);
   return found.length ? found.join(',') : 'OTHER_LOG_SIGNATURE';
 }
@@ -96,6 +98,7 @@ try {
   const counts = [
     ['suites', report.numTotalTestSuites],
     ['passed', report.numPassedTestSuites],
+    ['passedTests', report.numPassedTests],
     ['failed', report.numFailedTestSuites],
     ['tests', report.numTotalTests],
     ['failedTests', report.numFailedTests],
