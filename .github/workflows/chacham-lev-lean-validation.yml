@@ -141,14 +141,14 @@ jobs:
 
           if [ "$TEST_TIER" = full ] || [ "$TEST_TIER" = all ]; then
             run_private unit pnpm exec vitest run --exclude=**/*.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/private-unit.json"
-            node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-unit.json" unit >> "$GITHUB_STEP_SUMMARY"
+            node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-unit.json" unit | tee -a "$GITHUB_STEP_SUMMARY"
             run_private typecheck pnpm exec tsc --noEmit
             run_private schema pnpm exec prisma db push --skip-generate
             if [ "$last_status" -eq 0 ]; then
               run_private database-target node scripts/e2e/assert-test-database.mjs
               if [ "$last_status" -eq 0 ]; then
                 run_private integration pnpm exec vitest run integration.test.ts --no-file-parallelism --reporter=json --outputFile="$RUNNER_TEMP/private-integration.json"
-                node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-integration.json" integration >> "$GITHUB_STEP_SUMMARY"
+                node "$GITHUB_WORKSPACE/harness/ci/chacham-lev-vitest-summary.cjs" "$RUNNER_TEMP/private-integration.json" integration | tee -a "$GITHUB_STEP_SUMMARY"
               fi
             else
               echo "- integration: BLOCKED (schema setup failed)" >> "$GITHUB_STEP_SUMMARY"
