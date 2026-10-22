@@ -1,0 +1,54 @@
+name: GH-190 verify receipt-test isolation
+on:
+  push:
+    branches:
+      - validation/gh-190-reference-tables-20261022
+    paths:
+      - .github/workflows/gh190-receipts-isolation.yml
+permissions:
+  contents: read
+jobs:
+  isolate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      SOURCE_SHA: e48ee84b8635bd39c8b44ce1b817648da123ce20
+      DATABASE_URL: postgresql://postgres:isolated@127.0.0.1:5432/not_used
+      NEXTAUTH_SECRET: isolated-ci-secret-no-deploy
+    steps:
+      - name: Check read-only source credential present
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: source
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install locked dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Run failing receipts test alone, without prior test pollution
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run 'src/app/(authenticated)/admin/receipts/page.test.tsx' --testNamePattern='ignores a stale failed load' --reporter=dot > "$RUNNER_TEMP/receipts.log" 2>&1
+          result=$?
+          echo "Isolated receipts stale-failure test exit: $result"
+          sed -E 's/\x1b\[[0-9;]*[[:alpha:]]//g' "$RUNNER_TEMP/receipts.log" | grep -E '^( Test Files |      Tests | FAIL |.*AssertionError)' | head -20 || true
+          exit "$result"
+      - name: Clean private checkout and output
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source"
+          rm -f -- "$RUNNER_TEMP/receipts.log"
