@@ -41,7 +41,8 @@ jobs:
       - name: Require private repository read-only token
         env:
           READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
-        run: test -n "$READ_TOKEN" || { echo "ENVIRONMENT: missing private-source read token"; exit 2; }
+        run: |
+          test -n "$READ_TOKEN" || { echo "ENVIRONMENT missing private-source read token"; exit 2; }
 
       - name: Checkout exact private source SHA with reviewed migration history
         uses: actions/checkout@v4
