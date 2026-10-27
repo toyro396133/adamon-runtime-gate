@@ -24,7 +24,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d dd_work188_test"
           --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      SOURCE_SHA: ed0fabbc836343af546b5ffe2cfc3d4fce4f12d6
+      SOURCE_SHA: 1c969931ab12179386d5d678ac8cd15c35e108f1
       DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
       DD_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
       NODE_OPTIONS: --max-old-space-size=4096
