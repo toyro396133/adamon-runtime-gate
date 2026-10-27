@@ -94,13 +94,17 @@ jobs:
           (async()=>{
             const db=new PrismaClient();
             try {
-              await db.$executeRawUnsafe('CREATE TABLE "AuditLog" ("id" TEXT PRIMARY KEY, "tenantId" TEXT, "model" TEXT, "action" TEXT)');
-              const sql=fs.readFileSync('prisma/migrations/20261027190000_s3_audit_subject_person_lookup/migration.sql','utf8');
-              for (const segment of sql.split(';').map(s=>s.trim()).filter(Boolean)) await db.$executeRawUnsafe(segment);
-              const indexes=await db.$queryRawUnsafe('SELECT indexname FROM pg_indexes WHERE tablename=$1 AND indexname=$2', 'AuditLog','AuditLog_address_subject_lookup_idx');
-              if(indexes.length!==1) throw new Error('S3 schema index missing');
+              await db.$transaction(async tx => {
+                await tx.$executeRawUnsafe('CREATE SCHEMA "s3_migration_probe"');
+                await tx.$executeRawUnsafe('CREATE TABLE "s3_migration_probe"."AuditLog" ("id" TEXT PRIMARY KEY, "tenantId" TEXT, "model" TEXT, "action" TEXT)');
+                await tx.$executeRawUnsafe('SET LOCAL search_path TO s3_migration_probe');
+                const sql=fs.readFileSync('prisma/migrations/20261027190000_s3_audit_subject_person_lookup/migration.sql','utf8');
+                for (const segment of sql.split(';').map(s=>s.trim()).filter(Boolean)) await tx.$executeRawUnsafe(segment);
+                const indexes=await tx.$queryRawUnsafe('SELECT indexname FROM pg_indexes WHERE schemaname=$1 AND tablename=$2 AND indexname=$3', 's3_migration_probe','AuditLog','AuditLog_address_subject_lookup_idx');
+                if(indexes.length!==1) throw new Error('S3 schema index missing');
+              });
             } finally {
-              await db.$executeRawUnsafe('DROP TABLE IF EXISTS "AuditLog"').catch(()=>{});
+              await db.$executeRawUnsafe('DROP SCHEMA IF EXISTS "s3_migration_probe" CASCADE').catch(()=>{});
               await db.$disconnect();
             }
           })().catch(()=>process.exit(1));
