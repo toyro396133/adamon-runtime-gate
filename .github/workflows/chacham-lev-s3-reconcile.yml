@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: c47dde86edaef8891fc191d1a43544019bef54c9
+  SOURCE_SHA: c3fff764cff2144266000c45663446e2c0127d55
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
   NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: c47dde86edaef8891fc191d1a43544019bef54c9
+          ref: c3fff764cff2144266000c45663446e2c0127d55
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
@@ -262,6 +262,19 @@ jobs:
                           summary.write(msg + "\n")
                           print(msg)
                   except Exception: pass
+              # Aggregate and numeric-only PostgreSQL 18 performance evidence.
+              try:
+                  native_text = (root / "native.log").read_text(errors="replace")
+                  import re
+                  for pattern in [
+                      r"S3_BACKFILL_EXPLAIN elapsed_ms=[0-9.]+ shared_hit=[0-9]+",
+                      r"S3_BACKFILL_SWEEP scanned=[0-9]+ pages=[0-9]+ maxPage=[0-9]+",
+                  ]:
+                      found = re.search(pattern, native_text)
+                      if found:
+                          summary.write(found.group(0) + "\n")
+                          print(found.group(0))
+              except Exception: pass
               summary.write("No unredacted test output, code or runtime artifacts retained.\n")
               print("Overall: " + ("PASS" if all_ok else "FAIL_OR_BLOCKED"))
               summary.write("Overall: " + ("PASS" if all_ok else "FAIL_OR_BLOCKED") + "\n")
