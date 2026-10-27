@@ -1,0 +1,219 @@
+name: Chacham Lev S3 indexed address knowledge reconciliation
+
+on:
+  push:
+    branches: [validation/s3-knowledge-audit-20261027]
+    paths: [.github/workflows/chacham-lev-s3-reconcile.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chacham-lev-s3-reconcile
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: d9617142a4c059746cf51e376a2448cfa1eca7b8
+  NEXT_TELEMETRY_DISABLED: '1'
+  NODE_OPTIONS: --max-old-space-size=4096
+  NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+
+jobs:
+  validate:
+    name: S3 pinned private source / disposable PostgreSQL 18
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: s3_knowledge_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d s3_knowledge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/s3_knowledge_test?connection_limit=10
+      PEOPLE_TEST_DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/s3_knowledge_test?connection_limit=10
+    steps:
+      - name: Require previously configured private-source token
+        env:
+          SOURCE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$SOURCE_TOKEN" || { echo 'ENVIRONMENT read access blocked'; exit 2; }
+      - name: Checkout private source at immutable audited SHA
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: d9617142a4c059746cf51e376a2448cfa1eca7b8
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify checkout and initialize private temporary output
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p "$RUNNER_TEMP/s3-private"
+          printf 'Pinned S3 source: %s\nPrivate code and raw diagnostic output never uploaded.\n' "$SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install frozen dependencies without project lifecycle scripts
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm install --frozen-lockfile --ignore-scripts > "$RUNNER_TEMP/s3-private/install.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/install.exit"
+      - name: Generate Prisma client and initialize ONLY disposable PostgreSQL
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec prisma generate > "$RUNNER_TEMP/s3-private/prisma-generate.log" 2>&1
+          gen=$?
+          pnpm exec prisma db push --skip-generate > "$RUNNER_TEMP/s3-private/schema.log" 2>&1
+          schema=$?
+          if [ "$gen" -ne 0 ] || [ "$schema" -ne 0 ]; then echo 1 > "$RUNNER_TEMP/s3-private/database.exit"; else echo 0 > "$RUNNER_TEMP/s3-private/database.exit"; fi
+      - name: Validate approved SQL migration on disposable PostgreSQL
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          node - > "$RUNNER_TEMP/s3-private/migration.log" 2>&1 <<'NODE'
+          const {PrismaClient}=require('@prisma/client');
+          const fs=require('node:fs');
+          (async()=>{
+            const db=new PrismaClient();
+            try {
+              await db.$executeRawUnsafe('CREATE TABLE "AuditLog" ("id" TEXT PRIMARY KEY, "tenantId" TEXT, "model" TEXT, "action" TEXT)');
+              const sql=fs.readFileSync('prisma/migrations/20261027190000_s3_audit_subject_person_lookup/migration.sql','utf8');
+              for (const segment of sql.split(';').map(s=>s.trim()).filter(Boolean)) await db.$executeRawUnsafe(segment);
+              const indexes=await db.$queryRawUnsafe('SELECT indexname FROM pg_indexes WHERE tablename=$1 AND indexname=$2', 'AuditLog','AuditLog_address_subject_lookup_idx');
+              if(indexes.length!==1) throw new Error('S3 schema index missing');
+            } finally {
+              await db.$executeRawUnsafe('DROP TABLE IF EXISTS "AuditLog"').catch(()=>{});
+              await db.$disconnect();
+            }
+          })().catch(()=>process.exit(1));
+          NODE
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/migration.exit"
+      - name: S3 unit tests including person creation regression
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/actions/personContactEdit.test.ts src/lib/knowledge-evidence.test.ts --reporter=json --outputFile="$RUNNER_TEMP/s3-private/unit.json" > "$RUNNER_TEMP/s3-private/unit.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/unit.exit"
+      - name: S3 real edit-form UI regression
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/components/AddEditPersonForm.test.tsx src/components/PersonEvidencePanel.test.tsx --reporter=json --outputFile="$RUNNER_TEMP/s3-private/form.json" > "$RUNNER_TEMP/s3-private/form.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/form.exit"
+      - name: S3 native PostgreSQL atomicity, idempotency, concurrency and authorization
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run --no-file-parallelism src/actions/personAddressEvent.integration.test.ts src/services/s3-address-events.integration.test.ts src/services/knowledge-evidence.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/s3-private/native.json" > "$RUNNER_TEMP/s3-private/native.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/native.exit"
+      - name: Adjacent existing PersonService and person-education regression
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/services/PersonService.test.ts src/actions/personEducationActions.test.ts --reporter=json --outputFile="$RUNNER_TEMP/s3-private/regression.json" > "$RUNNER_TEMP/s3-private/regression.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/regression.exit"
+      - name: Full TypeScript typecheck
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec tsc --noEmit > "$RUNNER_TEMP/s3-private/types.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/types.exit"
+      - name: Full ESLint
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec eslint . > "$RUNNER_TEMP/s3-private/lint.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/lint.exit"
+      - name: Production build with NO external database connection
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          env -u DATABASE_URL -u PEOPLE_TEST_DATABASE_URL pnpm run build > "$RUNNER_TEMP/s3-private/build.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/build.exit"
+      - name: Publish only aggregate results and enforce every S3 gate
+        if: always()
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "s3-private"
+          all_ok = True
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("\n### S3 acceptance summary (aggregate only)\n")
+              for name in ["install","database","migration","unit","form","native","regression","types","lint","build"]:
+                  try: status = int((root / (name + ".exit")).read_text().strip())
+                  except Exception: status = 255
+                  good = status == 0
+                  all_ok &= good
+                  line = f"{name}: {'PASS' if good else 'FAIL_OR_BLOCKED'}"
+                  summary.write(line + "\n")
+                  print(line)
+                  if name in ["unit","form","native","regression"]:
+                      try:
+                          obj = json.loads((root / (name + ".json")).read_text())
+                          passed = int(obj["numPassedTests"])
+                          failed = int(obj["numFailedTests"])
+                          pending = int(obj["numPendingTests"])
+                          failed_suites = int(obj["numFailedTestSuites"])
+                          suites = int(obj["numTotalTestSuites"])
+                          good_counts = passed > 0 and failed == 0 and pending == 0 and failed_suites == 0 and suites > 0
+                          if name == "unit": good_counts &= passed >= 22
+                          if name == "native": good_counts &= passed >= 28
+                          if name == "form": good_counts &= passed >= 9
+                          all_ok &= good_counts
+                          line = f"  passed={passed} failed={failed} skipped={pending} failed_suites={failed_suites} complete={good_counts}"
+                          summary.write(line + "\n")
+                          print(line)
+                          if failed or failed_suites:
+                              ordinals = [i for result in obj.get("testResults", [])
+                                          for i, assertion in enumerate(result.get("assertionResults", []), start=1)
+                                          if assertion.get("status") == "failed"]
+                              detail = "  failed_test_ordinals=" + ",".join(str(i) for i in ordinals)
+                              print(detail)
+                              summary.write(detail + "\n")
+                      except Exception:
+                          summary.write("  test report absent: NOT_VERIFIED\n")
+                          print("  test report absent: NOT_VERIFIED")
+                          all_ok = False
+              summary.write("No unredacted test output, code or runtime artifacts retained.\n")
+              print("Overall: " + ("PASS" if all_ok else "FAIL_OR_BLOCKED"))
+              summary.write("Overall: " + ("PASS" if all_ok else "FAIL_OR_BLOCKED") + "\n")
+          raise SystemExit(0 if all_ok else 1)
+      - name: Destroy temporary private source and raw diagnostic outputs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$RUNNER_TEMP/s3-private"
+          echo 'Private source and diagnostic files removed.' >> "$GITHUB_STEP_SUMMARY"
