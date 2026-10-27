@@ -1,0 +1,131 @@
+name: GH238 mobile isolated acceptance
+on:
+  push:
+    branches: [validation/door-mobile-gh238-20261028]
+    paths: [.github/workflows/mobile238-validation.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mobile238-isolated
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: dd_work188_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55480:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dd_work188_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      SOURCE_SHA: ea14f12b3f845f4efef501e312ca999198c5ea34
+      DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
+      DD_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
+      NODE_OPTIONS: --max-old-space-size=4096
+      NEXT_TELEMETRY_DISABLED: '1'
+      AUTH_TRUST_HOST: 'true'
+      NEXTAUTH_URL: http://127.0.0.1:3007
+    steps:
+      - name: Checkout pinned private source without persisted token
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+      - name: Verify immutable source and prepare private evidence
+        working-directory: source
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "DD_ACCEPTANCE_DIR=$RUNNER_TEMP/work188-private" >> "$GITHUB_ENV"
+          echo "DD_PLAYWRIGHT_MODULE=$RUNNER_TEMP/work188-pw/node_modules/playwright" >> "$GITHUB_ENV"
+          auth_secret=$(openssl rand -hex 32)
+          nextauth_secret=$(openssl rand -hex 32)
+          echo "::add-mask::$auth_secret"
+          echo "::add-mask::$nextauth_secret"
+          echo "AUTH_SECRET=$auth_secret" >> "$GITHUB_ENV"
+          echo "NEXTAUTH_SECRET=$nextauth_secret" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/work188-private"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Install pinned application dependencies privately
+        working-directory: source
+        run: pnpm install --frozen-lockfile > "$DD_ACCEPTANCE_DIR/install.log" 2>&1
+      - name: Provision isolated browser tool
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/work188-pw" playwright@1.55.0 > "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          node "$RUNNER_TEMP/work188-pw/node_modules/playwright/cli.js" install chromium >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          if ! node -e 'require(process.env.DD_PLAYWRIGHT_MODULE).chromium.launch({headless:true}).then(b=>b.close()).catch(()=>process.exit(1))' >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1; then
+            node "$RUNNER_TEMP/work188-pw/node_modules/playwright/cli.js" install-deps chromium >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          fi
+      - name: Run exact-head code SQL upgrade and browser acceptance
+        working-directory: source
+        run: node scripts/door-to-door/acceptance.cjs
+      - name: Publish sanitized results and encrypt private diagnostics
+        if: always()
+        shell: bash
+        run: |
+          echo "## PR188 isolated acceptance" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$DD_ACCEPTANCE_DIR/summary.json" ]; then
+            cat "$DD_ACCEPTANCE_DIR/summary.json" >> "$GITHUB_STEP_SUMMARY"
+            cp "$DD_ACCEPTANCE_DIR/summary.json" "$RUNNER_TEMP/work188-summary.json"
+          else
+            echo '{"status":"BLOCKED_ENVIRONMENT"}' > "$RUNNER_TEMP/work188-summary.json"
+          fi
+          cat > "$RUNNER_TEMP/work188-public-cert.pem" <<'CERT'
+          -----BEGIN CERTIFICATE-----
+          MIIDKzCCAhOgAwIBAgIUV8nNtt1mE+G/dUZLb940F50qvYYwDQYJKoZIhvcNAQEL
+          BQAwJTEjMCEGA1UEAwwabW9iaWxlMjM4LXByaXZhdGUtZXZpZGVuY2UwHhcNMjYx
+          MDI3MjIxNTAzWhcNMjYxMTAzMjIxNTAzWjAlMSMwIQYDVQQDDBptb2JpbGUyMzgt
+          cHJpdmF0ZS1ldmlkZW5jZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
+          AKqJi8kqu0ryQa3ZiHhXtxYYdjB1n0D0wAtp5LWIjZR5IraYfwNImPkjtCr9VNP9
+          MvTZwpNoIaQRJVgYIyICdQ1fklpgCsYwqjSlAINpOKp8T9IZP9A6eSS2kTCTSrM0
+          WQNNlsPmNRR6Wv2cwJRR3RkMH0oMyZePoGHFQLhjbPjMQOKzCzt4lcb7k+sBIZv7
+          XzyhuvrLTGytkYQ6GVavtnQMBxDRS76cg2dnpo7mYjiSkwDSf55zJWBaum8Q5aOK
+          A63LaXVo0O4IXWnreI5smJQvpxnlGerk63b7+HqcF3olt4CfD8aHeQEZ7KvtvC8/
+          KohtUa+3sRFvKcREUFGEEaMCAwEAAaNTMFEwHQYDVR0OBBYEFCDsGtzEqg7B5v0P
+          /hc81k5qFheZMB8GA1UdIwQYMBaAFCDsGtzEqg7B5v0P/hc81k5qFheZMA8GA1Ud
+          EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAFibz7o8B60ZI4fj3eOKdv6U
+          D24aBpETOFSByMB1FSF3HabloayVEwfd5ltBi94zMLV8FAgNGlpt1gBoVNHI6Us/
+          0JKphWLYXBYjuR/M5lfnpcH9ombhsE0XUkl+dz7uqLNLlKvToxZXHh/0E0XBCW3F
+          7v5N4FIRRBAS1FApMIIQ7e8iKcH0rKkTdIQ/2Oxnz17CokjHtlegHHdb0jYLP5cr
+          gxEJ0aOi43SUE9aI/yXBVL/YkJwknSmx6rTwxBNyIrch8MOwCg+WSfK0XRt+hX1+
+          s/OWID/rlCTbcSjAD4tfv5eZNr5FNlfrGE56JY/UPvmdq+Szei16PGky76i46wQ=
+          -----END CERTIFICATE-----
+          CERT
+          tar -C "$DD_ACCEPTANCE_DIR" -cf "$RUNNER_TEMP/work188-private.tar" .
+          openssl cms -encrypt -binary -aes-256-cbc -in "$RUNNER_TEMP/work188-private.tar" -out "$RUNNER_TEMP/work188-private.enc" -outform DER "$RUNNER_TEMP/work188-public-cert.pem"
+      - name: Retain encrypted diagnostics and sanitized summary only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: work188-encrypted-evidence
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/work188-summary.json
+            ${{ runner.temp }}/work188-private.enc
+      - name: Clean ephemeral private source and unencrypted evidence
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, pathlib, shutil
+          shutil.rmtree(pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'source', ignore_errors=True)
+          shutil.rmtree(pathlib.Path(os.environ['RUNNER_TEMP']) / 'work188-private', ignore_errors=True)
+          (pathlib.Path(os.environ['RUNNER_TEMP']) / 'work188-private.tar').unlink(missing_ok=True)
+          PY
