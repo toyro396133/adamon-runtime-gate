@@ -24,7 +24,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d dd_work188_test"
           --health-interval 10s --health-timeout 5s --health-retries 5
     env:
-      SOURCE_SHA: 1c969931ab12179386d5d678ac8cd15c35e108f1
+      SOURCE_SHA: 96f6c6ddf2f2a77457dbc21a969d225a4b700be8
       DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
       DD_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
       NODE_OPTIONS: --max-old-space-size=4096
@@ -89,23 +89,24 @@ jobs:
           fi
           cat > "$RUNNER_TEMP/work188-public-cert.pem" <<'CERT'
           -----BEGIN CERTIFICATE-----
-          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
+          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
+          GWyloN4lfVqV
           -----END CERTIFICATE-----
           CERT
           tar -C "$DD_ACCEPTANCE_DIR" -cf "$RUNNER_TEMP/work188-private.tar" .
