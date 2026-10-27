@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: 7f308871a212c8d8c35c9b2c2c1076ff6a887339
+  SOURCE_SHA: d4880b6f4e56c85298fcc457a48f0926c1ebafd8
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
   NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 7f308871a212c8d8c35c9b2c2c1076ff6a887339
+          ref: d4880b6f4e56c85298fcc457a48f0926c1ebafd8
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
@@ -284,7 +284,7 @@ jobs:
                              for key in ["elapsedMs", "sharedHit"])
                   assert all(type(sweep.get(key)) is int and sweep[key] >= 0
                              for key in ["scanned", "pages", "maxPage"])
-                  assert sweep["scanned"] >= 1600 and sweep["pages"] > 6 and sweep["maxPage"] <= 250
+                  assert sweep["scanned"] >= 11600 and sweep["pages"] >= 47 and sweep["maxPage"] <= 250
                   for message in [
                       f"S3 PG18 EXPLAIN: elapsed_ms={plan['elapsedMs']} shared_hit={plan['sharedHit']} index=AuditLog_pkey",
                       f"S3 PG18 backfill: scanned={sweep['scanned']} pages={sweep['pages']} max_page={sweep['maxPage']}",
