@@ -1,0 +1,174 @@
+name: Chacham Lev S2 pinned address audit acceptance
+
+on:
+  push:
+    branches: [validation/s2-address-atomic-20261027]
+    paths: [.github/workflows/chacham-lev-s2-atomic.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chacham-lev-s2-atomic
+  cancel-in-progress: false
+
+env:
+  SOURCE_SHA: 993871181cfcdcfa4ff8d8346757648fbdeb2b1c
+  NEXT_TELEMETRY_DISABLED: '1'
+  NODE_OPTIONS: --max-old-space-size=4096
+  NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+
+jobs:
+  validate:
+    name: S2 pinned private source / disposable PostgreSQL 18
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-only
+          POSTGRES_DB: s2_address_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d s2_address_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/s2_address_test?connection_limit=10
+      PEOPLE_TEST_DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/s2_address_test?connection_limit=10
+    steps:
+      - name: Require previously configured private-source token
+        env:
+          SOURCE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$SOURCE_TOKEN" || { echo 'ENVIRONMENT read access blocked'; exit 2; }
+      - name: Checkout private source at immutable audited SHA
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 993871181cfcdcfa4ff8d8346757648fbdeb2b1c
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify checkout and initialize private temporary output
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir -p "$RUNNER_TEMP/s2-private"
+          printf 'Pinned S2 source: %s\nPrivate code and raw diagnostic output never uploaded.\n' "$SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install frozen dependencies without project lifecycle scripts
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm install --frozen-lockfile --ignore-scripts > "$RUNNER_TEMP/s2-private/install.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s2-private/install.exit"
+      - name: Generate Prisma client and initialize ONLY disposable PostgreSQL
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec prisma generate > "$RUNNER_TEMP/s2-private/prisma-generate.log" 2>&1
+          gen=$?
+          pnpm exec prisma db push --skip-generate > "$RUNNER_TEMP/s2-private/schema.log" 2>&1
+          schema=$?
+          if [ "$gen" -ne 0 ] || [ "$schema" -ne 0 ]; then echo 1 > "$RUNNER_TEMP/s2-private/database.exit"; else echo 0 > "$RUNNER_TEMP/s2-private/database.exit"; fi
+      - name: S2 unit tests including person creation regression
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/actions/personContactEdit.test.ts --reporter=json --outputFile="$RUNNER_TEMP/s2-private/unit.json" > "$RUNNER_TEMP/s2-private/unit.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s2-private/unit.exit"
+      - name: S2 native PostgreSQL atomicity, idempotency, concurrency and authorization
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/actions/personAddressEvent.integration.test.ts --reporter=json --outputFile="$RUNNER_TEMP/s2-private/native.json" > "$RUNNER_TEMP/s2-private/native.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s2-private/native.exit"
+      - name: Adjacent existing PersonService and person-education regression
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec vitest run src/services/PersonService.test.ts src/actions/personEducationActions.test.ts --reporter=json --outputFile="$RUNNER_TEMP/s2-private/regression.json" > "$RUNNER_TEMP/s2-private/regression.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s2-private/regression.exit"
+      - name: Full TypeScript typecheck
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec tsc --noEmit > "$RUNNER_TEMP/s2-private/types.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s2-private/types.exit"
+      - name: Full ESLint
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          pnpm exec eslint . > "$RUNNER_TEMP/s2-private/lint.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s2-private/lint.exit"
+      - name: Production build with NO external database connection
+        if: success() || failure()
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          env -u DATABASE_URL -u PEOPLE_TEST_DATABASE_URL pnpm run build > "$RUNNER_TEMP/s2-private/build.log" 2>&1
+          printf '%s\n' "$?" > "$RUNNER_TEMP/s2-private/build.exit"
+      - name: Publish only aggregate results and enforce every S2 gate
+        if: always()
+        shell: python
+        run: |
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]) / "s2-private"
+          all_ok = True
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("\n### S2 acceptance summary (aggregate only)\n")
+              for name in ["install","database","unit","native","regression","types","lint","build"]:
+                  try: status = int((root / (name + ".exit")).read_text().strip())
+                  except Exception: status = 255
+                  good = status == 0
+                  all_ok &= good
+                  summary.write(f"{name}: {'PASS' if good else 'FAIL_OR_BLOCKED'}\n")
+                  if name in ["unit","native","regression"]:
+                      try:
+                          obj = json.loads((root / (name + ".json")).read_text())
+                          passed = int(obj["numPassedTests"])
+                          failed = int(obj["numFailedTests"])
+                          pending = int(obj["numPendingTests"])
+                          failed_suites = int(obj["numFailedTestSuites"])
+                          suites = int(obj["numTotalTestSuites"])
+                          good_counts = passed > 0 and failed == 0 and pending == 0 and failed_suites == 0 and suites > 0
+                          if name == "unit": good_counts &= passed >= 12
+                          if name == "native": good_counts &= passed >= 7
+                          all_ok &= good_counts
+                          summary.write(f"  passed={passed} failed={failed} skipped={pending} failed_suites={failed_suites} complete={good_counts}\n")
+                      except Exception:
+                          summary.write("  test report absent: NOT_VERIFIED\n")
+                          all_ok = False
+              summary.write("No unredacted test output, code or runtime artifacts retained.\n")
+              summary.write("Overall: " + ("PASS" if all_ok else "FAIL_OR_BLOCKED") + "\n")
+          raise SystemExit(0 if all_ok else 1)
+      - name: Destroy temporary private source and raw diagnostic outputs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$RUNNER_TEMP/s2-private"
+          echo 'Private source and diagnostic files removed.' >> "$GITHUB_STEP_SUMMARY"
