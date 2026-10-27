@@ -151,6 +151,17 @@ jobs:
           set +e
           pnpm exec tsc --noEmit > "$RUNNER_TEMP/s3-private/types.log" 2>&1
           printf '%s\n' "$?" > "$RUNNER_TEMP/s3-private/types.exit"
+      - name: Report sanitized TypeScript location early
+        if: success() || failure()
+        shell: python
+        run: |
+          import re, hashlib, os
+          from pathlib import Path
+          file=Path(os.environ["RUNNER_TEMP"]) / "s3-private" / "types.log"
+          if file.exists():
+              for m in re.finditer(r"([^\s():]+)\((\d+),\d+\): error (TS\d+)", file.read_text(errors="replace")):
+                  path=m.group(1)
+                  print(f"TS_DIAG hash={hashlib.sha256(path.encode()).hexdigest()[:16]} basename_hash={hashlib.sha256(path.split('/')[-1].encode()).hexdigest()[:16]} depth={len(path.split('/'))} line={m.group(2)} code={m.group(3)}")
       - name: Full ESLint
         if: success() || failure()
         working-directory: source
@@ -231,7 +242,8 @@ jobs:
                           idx = allowed.index(filename) + 1 if filename in allowed else 0
                           import hashlib
                           digest = hashlib.sha256(match.group(1).encode("utf8")).hexdigest()[:16]
-                          detail = f"TypeScript path_hash={digest} group={idx} line={match.group(2)} code={match.group(3)}"
+                          base_hash = hashlib.sha256(filename.encode("utf8")).hexdigest()[:16]
+                          detail = f"TypeScript path_hash={digest} basename_hash={base_hash} depth={len(match.group(1).split('/'))} group={idx} line={match.group(2)} code={match.group(3)}"
                           summary.write(detail + "\n")
                           print(detail)
               for group in ["unit","form","native","regression"]:
