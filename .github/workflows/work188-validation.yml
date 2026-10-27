@@ -48,8 +48,12 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           echo "DD_ACCEPTANCE_DIR=$RUNNER_TEMP/work188-private" >> "$GITHUB_ENV"
           echo "DD_PLAYWRIGHT_MODULE=$RUNNER_TEMP/work188-pw/node_modules/playwright" >> "$GITHUB_ENV"
-          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          auth_secret=$(openssl rand -hex 32)
+          nextauth_secret=$(openssl rand -hex 32)
+          echo "::add-mask::$auth_secret"
+          echo "::add-mask::$nextauth_secret"
+          echo "AUTH_SECRET=$auth_secret" >> "$GITHUB_ENV"
+          echo "NEXTAUTH_SECRET=$nextauth_secret" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/work188-private"
       - uses: actions/setup-node@v4
         with:
