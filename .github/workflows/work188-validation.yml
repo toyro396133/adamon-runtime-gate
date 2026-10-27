@@ -68,7 +68,10 @@ jobs:
         shell: bash
         run: |
           npm install --prefix "$RUNNER_TEMP/work188-pw" playwright@1.55.0 > "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
-          node "$RUNNER_TEMP/work188-pw/node_modules/playwright/cli.js" install --with-deps chromium >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          node "$RUNNER_TEMP/work188-pw/node_modules/playwright/cli.js" install chromium >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          if ! node -e 'require(process.env.DD_PLAYWRIGHT_MODULE).chromium.launch({headless:true}).then(b=>b.close()).catch(()=>process.exit(1))' >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1; then
+            node "$RUNNER_TEMP/work188-pw/node_modules/playwright/cli.js" install-deps chromium >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          fi
       - name: Run exact-head code SQL upgrade and browser acceptance
         working-directory: source
         run: node scripts/door-to-door/acceptance.cjs
