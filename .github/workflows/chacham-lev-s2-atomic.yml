@@ -146,7 +146,9 @@ jobs:
                   except Exception: status = 255
                   good = status == 0
                   all_ok &= good
-                  summary.write(f"{name}: {'PASS' if good else 'FAIL_OR_BLOCKED'}\n")
+                  line = f"{name}: {'PASS' if good else 'FAIL_OR_BLOCKED'}"
+                  summary.write(line + "\n")
+                  print(line)
                   if name in ["unit","native","regression"]:
                       try:
                           obj = json.loads((root / (name + ".json")).read_text())
@@ -159,11 +161,15 @@ jobs:
                           if name == "unit": good_counts &= passed >= 12
                           if name == "native": good_counts &= passed >= 7
                           all_ok &= good_counts
-                          summary.write(f"  passed={passed} failed={failed} skipped={pending} failed_suites={failed_suites} complete={good_counts}\n")
+                          line = f"  passed={passed} failed={failed} skipped={pending} failed_suites={failed_suites} complete={good_counts}"
+                          summary.write(line + "\n")
+                          print(line)
                       except Exception:
                           summary.write("  test report absent: NOT_VERIFIED\n")
+                          print("  test report absent: NOT_VERIFIED")
                           all_ok = False
               summary.write("No unredacted test output, code or runtime artifacts retained.\n")
+              print("Overall: " + ("PASS" if all_ok else "FAIL_OR_BLOCKED"))
               summary.write("Overall: " + ("PASS" if all_ok else "FAIL_OR_BLOCKED") + "\n")
           raise SystemExit(0 if all_ok else 1)
       - name: Destroy temporary private source and raw diagnostic outputs
