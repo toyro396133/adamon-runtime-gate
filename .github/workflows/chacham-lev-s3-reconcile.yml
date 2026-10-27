@@ -39,6 +39,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/s3_knowledge_test?connection_limit=10
       PEOPLE_TEST_DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/s3_knowledge_test?connection_limit=10
+      STAGE1_TEST_DATABASE_URL: postgresql://postgres:isolated-ci-only@127.0.0.1:5432/s3_knowledge_test?connection_limit=10
     steps:
       - name: Require previously configured private-source token
         env:
