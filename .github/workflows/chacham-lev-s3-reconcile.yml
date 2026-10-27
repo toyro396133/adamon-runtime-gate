@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_SHA: ced31e1786a01c0a4880dd583f565bf2c4f207f0
+  SOURCE_SHA: 12f8cf09918112507ec7b9f752862f15c4df2aa1
   NEXT_TELEMETRY_DISABLED: '1'
   NODE_OPTIONS: --max-old-space-size=4096
   NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
@@ -49,7 +49,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: ced31e1786a01c0a4880dd583f565bf2c4f207f0
+          ref: 12f8cf09918112507ec7b9f752862f15c4df2aa1
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
@@ -222,6 +222,16 @@ jobs:
                       safe = "TypeScript error codes: " + ",".join(f"{code}={count}" for code, count in sorted(Counter(codes).items()))
                       summary.write(safe + "\n")
                       print(safe)
+                      # Only numbered locations in our already-declared S3 diff (no private content).
+                      allowed = ["schema.prisma", "personActions.ts", "KnowledgeEvidenceService.ts",
+                                 "PersonEvidencePanel.tsx", "s3-address-events.integration.test.ts",
+                                 "s3-backfill-audit-subject.ts", "personAddressEvent.integration.test.ts"]
+                      for match in re.finditer(r"([^\s():]+)\((\d+),\d+\): error (TS\d+)", (root / "types.log").read_text(errors="replace")):
+                          filename = match.group(1).split("/")[-1]
+                          idx = allowed.index(filename) + 1 if filename in allowed else 0
+                          detail = f"TypeScript location group={idx} line={match.group(2)} code={match.group(3)}"
+                          summary.write(detail + "\n")
+                          print(detail)
               for group in ["unit","form","native","regression"]:
                   try:
                       obj = json.loads((root / (group + ".json")).read_text())
