@@ -142,7 +142,7 @@ jobs:
 
   i3-auth-browser:
     name: I3 real NextAuth + Chromium + synthetic source evidence
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
       postgres:
