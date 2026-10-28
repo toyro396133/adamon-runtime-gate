@@ -35,10 +35,6 @@ jobs:
             echo "BLOCKED: CHACHAM_LEV_READ_TOKEN missing"
             missing=1
           fi
-          if [ -z "$STAGING_DATABASE_URL" ]; then
-            echo "BLOCKED: I3_STAGING_DATABASE_URL not provisioned"
-            missing=1
-          fi
           if [ "$missing" -ne 0 ]; then exit 2; fi
 
       - name: Checkout pinned private importer (no persisted credentials)
@@ -67,6 +63,68 @@ jobs:
           test "$(sha256sum "importer/$cards" | cut -d' ' -f1)" = "884117113471a43714c658e3485ad692fcd63dda51ac42070d85a3bf013c9cf3" || exit 3
           test "$(sha256sum "importer/$history" | cut -d' ' -f1)" = "1f4791c2370e04886d94a817ea9dd371f12fd7ddbeab534f3fd725d8456cd869" || exit 3
           echo "PINNED_IMPORTER_AND_IDENTICAL_ORIGINAL_ACTIVE_SOURCE_BYTES_VERIFIED"
+
+      - name: Verify real embedded Active source statistics before optional Neon connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import sys, json
+          from pathlib import Path
+          from collections import Counter
+          module=Path('importer/scripts/import-v2')
+          sys.path.insert(0,str(module.resolve()))
+          from audit_source import parse_csv
+          from person_plan import build_candidate, text
+          from person_classification import OWNER_DECISION
+          from reference_plan import numeric_key
+          manifest=json.loads((module/'source-manifest.json').read_text())
+          schema=json.loads((module/'source-headers.json').read_text())
+          meta={Path(x['path']).stem:x for x in manifest['files']}
+          source=Path('importer/apps/active/Tables/נתונים_טבלאות_מקושרות')
+          cards, repaired=parse_csv((source/'תורמים.csv').read_bytes(),meta['תורמים'],schema['תורמים'])
+          history, _=parse_csv((source/'שינוייםתורמים.csv').read_bytes(),meta['שינוייםתורמים'],schema['שינוייםתורמים'])
+          candidate=build_candidate(cards,'SOURCE_AUDIT_ONLY_NOT_REAL_TENANT',
+                                    owner_decision_ref=OWNER_DECISION)
+          assert len(cards)==4999 and len(history)==89745
+          assert len(candidate['entries'])==4472 and len(candidate['quarantine'])==527
+          assert len(schema['תורמים'])==65
+          sourcekeys={r['source_key'] for r in candidate['source_rows']}
+          admitted={e['source']['source_key'] for e in candidate['entries']}
+          history_refs=[numeric_key(h['קודתורם']) for h in history]
+          missing_refs=sum(k is None or not k or k not in sourcekeys for k in history_refs)
+          excluded_refs=sum(k in sourcekeys and k not in admitted for k in history_refs)
+          key_counts=Counter(h['קוד'].strip() for h in history if h['קוד'].strip())
+          name_counts=Counter((text(r['שם']),text(r['משפחה'])) for r in cards
+                              if text(r['שם']) and text(r['משפחה']))
+          reasons=Counter(e['reason'] for e in candidate['quarantine'])
+          summary={
+            'step':'VERIFIED_ORIGINAL_ACTIVE_BYTES_SOURCE_ONLY',
+            'exact_active_commit':manifest['source_sha'],
+            'cards':len(cards),
+            'history_rows':len(history),
+            'field_count':len(schema['תורמים']),
+            'person_candidates':len(candidate['entries']),
+            'quarantined_cards':len(candidate['quarantine']),
+            'source_key_duplicates':len(cards)-len(sourcekeys),
+            'history_unmatched_or_empty_references':missing_refs,
+            'history_references_to_quarantined_cards':excluded_refs,
+            'history_blank_date_observations':sum(not h['תאריך'].strip() for h in history),
+            'history_blank_identifier_observations':sum(not h['קוד'].strip() for h in history),
+            'history_duplicate_nonempty_identifiers':sum(c-1 for c in key_counts.values() if c>1),
+            'same_normalized_first_last_name_extra_cards':sum(c-1 for c in name_counts.values() if c>1),
+            'same_normalized_first_last_name_groups':sum(1 for c in name_counts.values() if c>1),
+            'name_partition':candidate['name_partition'],
+            'classification_partition':candidate['counts'],
+            'quarantine_reasons':dict(sorted(reasons.items())),
+            'provider_reference_partition':candidate['provider_endpoint_partition'],
+            'known_header_repair_strictly_pinned':repaired,
+            'private_tenant_and_full_plan_sha256':'NOT_YET_COMPUTED',
+            'data_writes':0,
+          }
+          print('SOURCE_ONLY_PRIVATE_ACTIVE_AGGREGATE='+json.dumps(summary,sort_keys=True,ensure_ascii=False))
+          PY
 
       - name: Obtain exact target tenant from isolated Neon via read-only SQL
         shell: bash
