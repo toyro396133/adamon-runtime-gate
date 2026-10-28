@@ -1,5 +1,5 @@
 name: I3 Backup Restore Verification
-run-name: I3 recovery verification ${ inputs.backup_branch_id } ${ inputs.protected_sha256 }
+run-name: I3 recovery verification ${{ inputs.backup_branch_id }} ${{ inputs.protected_sha256 }}
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: i3-backup-recovery-${ inputs.backup_branch_id }
+  group: i3-backup-recovery-${{ inputs.backup_branch_id }}
   cancel-in-progress: false
 
 jobs:
@@ -26,12 +26,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      NEON_API_KEY: ${ secrets.NEON_API_KEY }
-      STAGING_DATABASE_URL: ${ secrets.I3_STAGING_DATABASE_URL }
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
       PROJECT_ID: fragrant-dream-21113210
       STAGING_BRANCH_ID: br-summer-frost-apf4ee36
-      BACKUP_BRANCH_ID: ${ inputs.backup_branch_id }
-      EXPECTED_PROTECTED_SHA256: ${ inputs.protected_sha256 }
+      BACKUP_BRANCH_ID: ${{ inputs.backup_branch_id }}
+      EXPECTED_PROTECTED_SHA256: ${{ inputs.protected_sha256 }}
     steps:
       - name: Validate exact recovery inputs
         shell: bash
