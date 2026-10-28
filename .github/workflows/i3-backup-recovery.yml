@@ -1,0 +1,198 @@
+name: I3 Backup Restore Verification
+run-name: I3 recovery verification ${ inputs.backup_branch_id } ${ inputs.protected_sha256 }
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_branch_id:
+        description: Exact temporary Neon backup branch ID (br-...)
+        required: true
+        type: string
+      protected_sha256:
+        description: SHA-256 of the ordered Tenant and User protected-state JSON
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: i3-backup-recovery-${ inputs.backup_branch_id }
+  cancel-in-progress: false
+
+jobs:
+  restore-verify:
+    name: I3 restore exact backup and verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NEON_API_KEY: ${ secrets.NEON_API_KEY }
+      STAGING_DATABASE_URL: ${ secrets.I3_STAGING_DATABASE_URL }
+      PROJECT_ID: fragrant-dream-21113210
+      STAGING_BRANCH_ID: br-summer-frost-apf4ee36
+      BACKUP_BRANCH_ID: ${ inputs.backup_branch_id }
+      EXPECTED_PROTECTED_SHA256: ${ inputs.protected_sha256 }
+    steps:
+      - name: Validate exact recovery inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$NEON_API_KEY" ] || [ -z "$STAGING_DATABASE_URL" ]; then
+            echo "Required private recovery credentials are not configured"
+            exit 2
+          fi
+          [[ "$PROJECT_ID" == "fragrant-dream-21113210" ]]
+          [[ "$STAGING_BRANCH_ID" == "br-summer-frost-apf4ee36" ]]
+          [[ "$BACKUP_BRANCH_ID" =~ ^br-[a-z0-9-]{8,60}$ ]]
+          [[ "$EXPECTED_PROTECTED_SHA256" =~ ^[a-f0-9]{64}$ ]]
+
+      - name: Verify backup branch metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          chmod 600 "$tmp"
+          trap 'rm -f "$tmp"' EXIT
+          curl --silent --show-error --fail \
+            -H "Authorization: Bearer $NEON_API_KEY" \
+            -H "Accept: application/json" \
+            "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$BACKUP_BRANCH_ID" \
+            -o "$tmp"
+          python3 - "$tmp" <<'PY'
+          import json, os, sys
+          from datetime import datetime, timedelta, timezone
+          value = json.load(open(sys.argv[1], encoding='utf-8'))
+          b = value.get('branch')
+          if not b or b.get('id') != os.environ['BACKUP_BRANCH_ID']:
+              raise SystemExit('BACKUP_BRANCH_ID_MISMATCH')
+          if b.get('project_id') != os.environ['PROJECT_ID']:
+              raise SystemExit('BACKUP_PROJECT_MISMATCH')
+          if b.get('parent_id') != os.environ['STAGING_BRANCH_ID']:
+              raise SystemExit('BACKUP_PARENT_MISMATCH')
+          if b.get('current_state') != 'ready':
+              raise SystemExit('BACKUP_NOT_READY')
+          expires = b.get('expires_at')
+          if not expires or datetime.fromisoformat(expires.replace('Z', '+00:00')) <= datetime.now(timezone.utc) + timedelta(hours=2):
+              raise SystemExit('BACKUP_EXPIRY_TOO_SOON')
+          PY
+
+      - name: Restore backup to disposable branch and verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          chmod 700 "$work"
+          temp_branch=""
+          cleanup() {
+            rc=$?
+            trap - EXIT
+            if [ -n "$temp_branch" ]; then
+              if ! curl --silent --show-error --fail \
+                -X DELETE \
+                -H "Authorization: Bearer $NEON_API_KEY" \
+                -H "Accept: application/json" \
+                "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$temp_branch" \
+                -o /dev/null; then
+                echo "Failed to remove disposable recovery branch"
+                rc=1
+              fi
+            fi
+            rm -rf -- "$work"
+            exit "$rc"
+          }
+          trap cleanup EXIT
+
+          # Derive only database/role names from the protected staging URI.
+          # Never print, echo, or persist the URI or password.
+          eval "$(python3 - <<'PY'
+          import os, shlex
+          from urllib.parse import urlsplit, unquote
+          u=urlsplit(os.environ['STAGING_DATABASE_URL'])
+          if u.scheme not in ('postgres','postgresql') or not u.hostname or not u.username or not u.path:
+              raise SystemExit('INVALID_STAGING_DATABASE_URI')
+          print('DB_NAME='+shlex.quote(unquote(u.path.lstrip('/'))))
+          print('DB_ROLE='+shlex.quote(unquote(u.username)))
+          PY
+          )"
+
+          name="i3-restore-verify-$GITHUB_RUN_ID"
+          payload="$(jq -cn --arg name "$name" --arg parent "$BACKUP_BRANCH_ID" \
+            '{branch:{name:$name,parent_id:$parent},endpoints:[{type:"read_write",autoscaling_limit_min_cu:0.25,autoscaling_limit_max_cu:0.25}]}')"
+          curl --silent --show-error --fail \
+            -X POST -H "Authorization: Bearer $NEON_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data "$payload" \
+            "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches" \
+            -o "$work/create.json"
+          temp_branch="$(jq -er '.branch.id' "$work/create.json")"
+          [[ "$temp_branch" =~ ^br-[a-z0-9-]{8,60}$ ]]
+
+          ready=0
+          for attempt in $(seq 1 30); do
+            curl --silent --show-error --fail \
+              -H "Authorization: Bearer $NEON_API_KEY" \
+              -H "Accept: application/json" \
+              "https://console.neon.tech/api/v2/projects/$PROJECT_ID/branches/$temp_branch" \
+              -o "$work/branch.json"
+            if [ "$(jq -r '.branch.current_state // ""' "$work/branch.json")" = "ready" ]; then
+              if [ "$(jq -r '.branch.parent_id // ""' "$work/branch.json")" = "$BACKUP_BRANCH_ID" ]; then
+                ready=1
+                break
+              fi
+              echo "Disposable restore branch parent mismatch"
+              exit 3
+            fi
+            sleep 5
+          done
+          [ "$ready" = 1 ] || { echo "Disposable restore branch did not become ready"; exit 4; }
+
+          curl --silent --show-error --fail --get \
+            -H "Authorization: Bearer $NEON_API_KEY" \
+            -H "Accept: application/json" \
+            --data-urlencode "branch_id=$temp_branch" \
+            --data-urlencode "database_name=$DB_NAME" \
+            --data-urlencode "role_name=$DB_ROLE" \
+            "https://console.neon.tech/api/v2/projects/$PROJECT_ID/connection_uri" \
+            -o "$work/connection.json"
+          restore_uri="$(jq -er '.uri' "$work/connection.json")"
+          [[ "$restore_uri" == postgresql://* || "$restore_uri" == postgres://* ]]
+
+          result="$(psql "$restore_uri" -X -qAt -v ON_ERROR_STOP=1 -c "
+            SELECT concat_ws('|',
+              current_setting('neon.project_id',true),
+              current_setting('neon.branch_id',true),
+              encode(sha256(convert_to(jsonb_build_object(
+                'Tenant',(SELECT coalesce(jsonb_agg(to_jsonb(t) ORDER BY id),'[]') FROM public.\"Tenant\" t),
+                'User',(SELECT coalesce(jsonb_agg(to_jsonb(u) ORDER BY id),'[]') FROM public.\"User\" u)
+              )::text,'UTF8')),'hex'),
+              (SELECT count(*)::text FROM public.\"Tenant\"),
+              (SELECT count(*)::text FROM public.\"User\"),
+              (SELECT count(*)::text FROM public.\"User\" WHERE \"tenantId\"=(SELECT id FROM public.\"Tenant\" LIMIT 1)),
+              (SELECT count(*)::text FROM public.\"Person\"),
+              (SELECT count(*)::text FROM public.\"Campaign\"),
+              (SELECT count(*)::text FROM public.\"Donation\"),
+              (SELECT count(*)::text FROM import_v2.canonical_result WHERE target_table<>'Person'),
+              (SELECT count(*)::text FROM import_v2.source_record WHERE batch_id='I2-20261022-01'),
+              (SELECT count(*)::text FROM import_v2.batch WHERE id='I3-IDENTITY-20261027-01')
+            )")"
+          IFS='|' read -r project branch digest tenants users tenant_users people campaigns donations i2_crosswalk i2_source i3_batches <<< "$result"
+          [ "$project" = "$PROJECT_ID" ] || { echo "RESTORED_PROJECT_MISMATCH"; exit 5; }
+          [ "$branch" = "$temp_branch" ] || { echo "RESTORED_BRANCH_MISMATCH"; exit 5; }
+          [ "$digest" = "$EXPECTED_PROTECTED_SHA256" ] || { echo "RESTORED_PROTECTED_DIGEST_MISMATCH"; exit 5; }
+          [ "$tenants" = "1" ] && [ "$users" = "3" ] && [ "$tenant_users" = "3" ] || { echo "RESTORED_ADMIN_TENANT_STATE_MISMATCH"; exit 5; }
+          [ "$people" = "0" ] && [ "$campaigns" = "0" ] && [ "$donations" = "0" ] || { echo "BACKUP_NOT_PRE_APPLY_STATE"; exit 5; }
+          [ "$i2_crosswalk" = "1420" ] && [ "$i2_source" = "1516" ] || { echo "RESTORED_I2_LEDGER_MISMATCH"; exit 5; }
+          [ "$i3_batches" = "0" ] || { echo "BACKUP_ALREADY_CONTAINS_I3_APPLY"; exit 5; }
+          echo "I3_RECOVERY_VERIFIED_V1 backup_branch=$BACKUP_BRANCH_ID protected_sha256=$digest run_id=$GITHUB_RUN_ID"
+
+      - name: Record source-free recovery receipt
+        shell: bash
+        run: |
+          {
+            echo "## I3 backup recovery verification"
+            echo "Backup branch: $BACKUP_BRANCH_ID"
+            echo "Protected Tenant/User digest: $EXPECTED_PROTECTED_SHA256"
+            echo "Recovery run ID: $GITHUB_RUN_ID"
+            echo "A disposable child branch was restored, checked, and deleted."
+            echo "Only aggregate counts and hashes were emitted; no source rows or credentials."
+          } >> "$GITHUB_STEP_SUMMARY"
