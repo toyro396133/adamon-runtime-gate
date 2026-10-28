@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: mobile238-main-composition
+  group: mobile238-isolated
   cancel-in-progress: false
 jobs:
   acceptance:
