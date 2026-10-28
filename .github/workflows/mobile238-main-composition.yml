@@ -1,0 +1,170 @@
+name: GH238 current-main virtual composition acceptance
+on:
+  push:
+    branches: [validation/door-mobile-gh238-20261028]
+    paths: [.github/workflows/mobile238-main-composition.yml]
+permissions:
+  contents: read
+concurrency:
+  group: mobile238-main-composition
+  cancel-in-progress: false
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: dd_work188_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['55480:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d dd_work188_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      MAIN_SHA: 0b1bd7a1deed9e8376a8d08c7531f3032263a87e
+      SOURCE_SHA: d3ea13a979e2e980afde6b2570941adf7b76af5b
+      DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
+      DD_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:55480/dd_work188_test
+      NODE_OPTIONS: --max-old-space-size=4096
+      NEXT_TELEMETRY_DISABLED: '1'
+      AUTH_TRUST_HOST: 'true'
+      NEXTAUTH_URL: http://127.0.0.1:3007
+    steps:
+      - name: Checkout pinned private source without persisted token
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.SOURCE_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+      - name: Verify immutable source and prepare private evidence
+        working-directory: source
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          echo "DD_ACCEPTANCE_DIR=$RUNNER_TEMP/work188-private" >> "$GITHUB_ENV"
+          echo "DD_PLAYWRIGHT_MODULE=$RUNNER_TEMP/work188-pw/node_modules/playwright" >> "$GITHUB_ENV"
+          auth_secret=$(openssl rand -hex 32)
+          nextauth_secret=$(openssl rand -hex 32)
+          echo "::add-mask::$auth_secret"
+          echo "::add-mask::$nextauth_secret"
+          echo "AUTH_SECRET=$auth_secret" >> "$GITHUB_ENV"
+          echo "NEXTAUTH_SECRET=$nextauth_secret" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/work188-private"
+      - name: Prepare isolated virtual tree and existing-main migration rehearsal
+        working-directory: source
+        shell: bash
+        run: |
+          git merge-tree --write-tree "$MAIN_SHA" "$SOURCE_SHA" > "$DD_ACCEPTANCE_DIR/composition-private.txt"
+          composed_tree=$(head -n 1 "$DD_ACCEPTANCE_DIR/composition-private.txt")
+          test "${#composed_tree}" = 40
+          git read-tree --reset -u "$composed_tree"
+          test "$(git write-tree)" = "$composed_tree"
+          echo "COMPOSED_TREE=$composed_tree" >> "$GITHUB_ENV"
+          export COMPOSED_TREE="$composed_tree"
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          migration="20261027190000_s3_audit_subject_person_lookup"
+          assert pathlib.Path("prisma/migrations",migration,"migration.sql").is_file()
+          p=pathlib.Path("scripts/door-to-door/upgrade-rehearsal.cjs")
+          original=p.read_text()
+          needle="'20261021230000_door_to_door_annual_membership_guard'];"
+          assert original.count(needle)==1
+          updated=original.replace(needle,"'20261021230000_door_to_door_annual_membership_guard','"+migration+"'];")
+          p.write_text(updated)
+          meta={"kind":"virtual-composition-no-branch-merge","candidate":os.environ["SOURCE_SHA"],"main":os.environ["MAIN_SHA"],"tree":os.environ["COMPOSED_TREE"],"harnessOverlay":{"path":str(p),"before":hashlib.sha256(original.encode()).hexdigest(),"after":hashlib.sha256(updated.encode()).hexdigest(),"purpose":"rehearse existing main S3 migration after six core migrations; no application/schema source edited"}}
+          pathlib.Path(os.environ["DD_ACCEPTANCE_DIR"],"composition-metadata.json").write_text(json.dumps(meta,indent=2))
+          print(json.dumps(meta))
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Install pinned application dependencies privately
+        working-directory: source
+        run: pnpm install --frozen-lockfile > "$DD_ACCEPTANCE_DIR/install.log" 2>&1
+      - name: Provision isolated browser tool
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/work188-pw" playwright@1.55.0 > "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          node "$RUNNER_TEMP/work188-pw/node_modules/playwright/cli.js" install chromium >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          if ! node -e 'require(process.env.DD_PLAYWRIGHT_MODULE).chromium.launch({headless:true}).then(b=>b.close()).catch(()=>process.exit(1))' >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1; then
+            node "$RUNNER_TEMP/work188-pw/node_modules/playwright/cli.js" install-deps chromium >> "$DD_ACCEPTANCE_DIR/browser-install.log" 2>&1
+          fi
+      - name: Run exact-head code SQL upgrade and browser acceptance
+        working-directory: source
+        shell: bash
+        run: |
+          set +e
+          SOURCE_SHA="virtual-tree:$COMPOSED_TREE;candidate:$SOURCE_SHA;main:$MAIN_SHA" node scripts/door-to-door/acceptance.cjs
+          composed_status=$?
+          set -e
+          python - <<'PY'
+          import json, os, pathlib
+          directory=pathlib.Path(os.environ["DD_ACCEPTANCE_DIR"])
+          summary=json.loads((directory/"summary.json").read_text())
+          summary["composition"]=json.loads((directory/"composition-metadata.json").read_text())
+          (directory/"summary.json").write_text(json.dumps(summary,indent=2))
+          PY
+          exit "$composed_status"
+      - name: Publish sanitized results and encrypt private diagnostics
+        if: always()
+        shell: bash
+        run: |
+          echo "## PR188 isolated acceptance" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source: $SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$DD_ACCEPTANCE_DIR/summary.json" ]; then
+            cat "$DD_ACCEPTANCE_DIR/summary.json" >> "$GITHUB_STEP_SUMMARY"
+            cp "$DD_ACCEPTANCE_DIR/summary.json" "$RUNNER_TEMP/work188-summary.json"
+          else
+            echo '{"status":"BLOCKED_ENVIRONMENT"}' > "$RUNNER_TEMP/work188-summary.json"
+          fi
+          cat > "$RUNNER_TEMP/work188-public-cert.pem" <<'CERT'
+          -----BEGIN CERTIFICATE-----
+          MIIDKzCCAhOgAwIBAgIUOEEFTQPT4H2UKAJ0vx1z9KzHWIAwDQYJKoZIhvcNAQEL
+          BQAwJTEjMCEGA1UEAwwabW9iaWxlMjM4LXByaXZhdGUtZXZpZGVuY2UwHhcNMjYx
+          MDI4MDI1ODE0WhcNMjYxMTA0MDI1ODE0WjAlMSMwIQYDVQQDDBptb2JpbGUyMzgt
+          cHJpdmF0ZS1ldmlkZW5jZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEB
+          AKK6C9IPkqyzWFrCfER2XAcd5QmJKAk5UyVfzQdS8ei8nJcYRUx1X/1E/nmiE6sD
+          KDPaKaXXLftRLCBfyJVfjQKzOmouo83FV6D/O+hL+BCEd6V5KP8iZpo2p7lUiV0s
+          18fHsAZnhD0+4i24fEwlybrcEmQpbpq8qhsskZwOyoCAKsl/ruj8XNeVj8u3ixwj
+          iE/5l9ccuNX4edSmaaAWEZubnKXYA0uAFDl0TTkdVFnFuFd3m09hAoLNUUUwwSLM
+          4XCnaws9DgC6I56rwVxmpOL4L7PbyZjE3udCSDQLcFJbi2tPgoWXJ3yM34HW+ZVH
+          UmoY5wilFyZ8kosdwDsparkCAwEAAaNTMFEwHQYDVR0OBBYEFD23Nv0tsJO/cqFy
+          rXM4h3d/0sbkMB8GA1UdIwQYMBaAFD23Nv0tsJO/cqFyrXM4h3d/0sbkMA8GA1Ud
+          EwEB/wQFMAMBAf8wDQYJKoZIhvcNAQELBQADggEBAETYKe2kPJk2EsnjunTaycNo
+          pXxW1NZjnlHtELtbn5R5Clmqbcx9H16JhfEdGR/MStXz5E2Q8yCAv5EYHXMLqAn5
+          QaxnfhOSpvMKtxs4wP8Sm3WYjVDgB9vnxqczwEawYrU2R+j+bgsIDiCzjizsRUpZ
+          c21QkrVd9kWiPZPYBflgu02GA8UzvX4XeRz6+L+6omPLMc2HORCG5CZ1Z55dL4P7
+          NK0WqI0Wj1RWsZRO8ig/WLTXeuEu8jhH9OgQUmNCdxD17rjo6WdOrJ+XYwog8H82
+          75kQnffttHc7ycDupwmFVqZFUN4814uHuGDKnWU8tQsuH/WyAW+9vvWzreHqFo0=
+          -----END CERTIFICATE-----
+          CERT
+          tar -C "$DD_ACCEPTANCE_DIR" -cf "$RUNNER_TEMP/work188-private.tar" .
+          openssl cms -encrypt -binary -aes-256-cbc -in "$RUNNER_TEMP/work188-private.tar" -out "$RUNNER_TEMP/work188-private.enc" -outform DER "$RUNNER_TEMP/work188-public-cert.pem"
+      - name: Retain encrypted diagnostics and sanitized summary only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile238-current-main-composition
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/work188-summary.json
+            ${{ runner.temp }}/work188-private.enc
+      - name: Clean ephemeral private source and unencrypted evidence
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os, pathlib, shutil
+          shutil.rmtree(pathlib.Path(os.environ['GITHUB_WORKSPACE']) / 'source', ignore_errors=True)
+          shutil.rmtree(pathlib.Path(os.environ['RUNNER_TEMP']) / 'work188-private', ignore_errors=True)
+          (pathlib.Path(os.environ['RUNNER_TEMP']) / 'work188-private.tar').unlink(missing_ok=True)
+          PY
