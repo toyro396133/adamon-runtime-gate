@@ -1,0 +1,66 @@
+name: I3 external gate security unit tests
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/import-v2-i3-gate-unit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  gate-unit:
+    name: Pinned I3 preflight unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      ACCEPTED_TEST_SHA: c6729cdc48005c1c8560794823253063cd28b4d3
+    steps:
+      - name: Require pre-existing private source read token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        shell: bash
+        run: |
+          test -n "$READ_TOKEN"
+
+      - name: Checkout exact private I3 candidate
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: c6729cdc48005c1c8560794823253063cd28b4d3
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: private-source
+
+      - name: Assert exact candidate SHA
+        working-directory: private-source
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$ACCEPTED_TEST_SHA"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Install frozen private dependencies
+        working-directory: private-source
+        run: pnpm install --frozen-lockfile
+
+      - name: Syntax-check the external preflight
+        working-directory: private-source
+        run: node --check scripts/import-v2/i3_apply_preflight.mjs
+
+      - name: Test exact restore-run binding, workflow pin and owner receipts
+        working-directory: private-source
+        run: node --test tests/import-v2/i3_apply_preflight.test.mjs
+
+      - name: Remove private source without publishing artifacts
+        if: always()
+        shell: bash
+        run: rm -rf -- "$GITHUB_WORKSPACE/private-source"
