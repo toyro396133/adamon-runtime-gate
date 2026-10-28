@@ -1,0 +1,164 @@
+name: IMPORT-V2 I3 private Active plan attestation
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/import-v2-i3-private-plan.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: import-v2-i3-private-plan
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Exact Active bytes - private candidate - aggregates only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      PINNED_APP_SHA: 8bf2747b0c882374e3a4d38bd19cf60e445cb58f
+      PINNED_ACTIVE_SHA: a06a837eaf36b83bc90fb86e2c3732978e29a58f
+      STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - name: Require independent private source checkout credential
+        shell: bash
+        env:
+          PRIVATE_SOURCE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PRIVATE_SOURCE_TOKEN" ]; then
+            echo "BLOCKED: preconfigured read-only source checkout token missing"
+            exit 2
+          fi
+
+      - name: Checkout pinned private importer (no persisted credentials)
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 8bf2747b0c882374e3a4d38bd19cf60e445cb58f
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: importer
+
+      - name: Checkout original immutable private Active commit
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/active
+          ref: a06a837eaf36b83bc90fb86e2c3732978e29a58f
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source-active
+
+      - name: Verify exactly both pinned Git commit SHAs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C importer rev-parse HEAD)" = "$PINNED_APP_SHA" || exit 3
+          test "$(git -C source-active rev-parse HEAD)" = "$PINNED_ACTIVE_SHA" || exit 3
+          echo "PINNED_IMPORTER_AND_ACTIVE_COMMITS_VERIFIED"
+
+      - name: Obtain exact target tenant from isolated Neon via read-only SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$STAGING_DATABASE_URL" ]; then
+            echo "BLOCKED: I3_STAGING_DATABASE_URL not provisioned on approved runner"
+            exit 6
+          fi
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlsplit
+          value=os.environ['STAGING_DATABASE_URL']
+          u=urlsplit(value)
+          if u.scheme not in ('postgres','postgresql') or not u.hostname or not u.path:
+              raise SystemExit('INVALID_STAGING_CONNECTION')
+          if 'neon.tech' not in u.hostname or u.path.strip('/')=='':
+              raise SystemExit('STAGING_CONNECTION_NOT_NEON')
+          PY
+          export PGOPTIONS='-c default_transaction_read_only=on'
+          tenant="$(psql "$STAGING_DATABASE_URL" -X -qAt -v ON_ERROR_STOP=1 -c 'SELECT id FROM public."Tenant" ORDER BY id')"
+          test -n "$tenant" || exit 6
+          test "$(printf '%s\n' "$tenant" | wc -l)" -eq 1 || exit 6
+          # The tenant ID is private input and must not appear in stdout.
+          printf '%s' "$tenant" > "$RUNNER_TEMP/i3-private-tenant"
+          chmod 600 "$RUNNER_TEMP/i3-private-tenant"
+          unset tenant
+          echo "PRIVATE_EXACT_TENANT_READ_ONLY_VERIFIED"
+
+      - name: Parse verified original raw bytes and generate full private plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          export PYTHONDONTWRITEBYTECODE=1
+          python3 - <<'PY'
+          import sys, json, hashlib
+          from pathlib import Path
+          from collections import Counter
+          root=Path('importer/scripts/import-v2')
+          sys.path.insert(0,str(root.resolve()))
+          from person_intake import from_source_bytes
+          from person_plan import canonical_json,digest,public_summary
+          active=Path('source-active/Tables/נתונים_טבלאות_מקושרות')
+          tenant=Path(__import__('os').environ['RUNNER_TEMP'],'i3-private-tenant').read_text()
+          plan=from_source_bytes((active/'תורמים.csv').read_bytes(),
+                                 (active/'שינוייםתורמים.csv').read_bytes(),tenant)
+          assert len(plan['source_rows'])==4999
+          assert len(plan['entries'])==4472
+          assert len(plan['quarantine'])==527
+          assert len(plan['history_rows'])==89745
+          assert len(plan['source_fields'])==65
+          assert plan['field_ledger_entries']==4999*65
+          ids=[e['target']['id'] for e in plan['entries']]
+          assert len(ids)==len(set(ids)),"DUPLICATE_TARGET_PERSON_ID"
+          sourcekeys=[r['source_key'] for r in plan['source_rows']]
+          assert len(sourcekeys)==len(set(sourcekeys)),"DUPLICATE_NORMALIZED_SOURCE_KEY"
+          canon=set(sourcekeys)
+          unmatched=sum(1 for h in plan['history_rows']
+                        if not h['source_key'] or h['source_key'] not in canon)
+          incomplete=sum(1 for h in plan['history_rows'] if not h['data']['תאריך'].strip())
+          partition=Counter(e['reason'] for e in plan['quarantine'])
+          assert sum(partition.values())==527
+          assert set(partition).issubset({'LAST_ONLY','NO_NAMES','FIRST_ONLY'})
+          raw=canonical_json(plan).encode('utf-8')
+          path=Path(__import__('os').environ['RUNNER_TEMP'],'i3-private-person-plan.json')
+          # This sensitive, exact plan exists ONLY on ephemeral protected runner
+          # storage; never send it to public logs/artifacts or GitHub repository.
+          with path.open('xb') as f: f.write(raw+b'\n')
+          path.chmod(0o600)
+          public=public_summary(plan)
+          public.update({
+            'stage':'PRIVATE_FULL_SOURCE_EXACT_PLAN_ATTESTED_NOT_APPLIED',
+            'pinned_active_sha':__import__('os').environ['PINNED_ACTIVE_SHA'],
+            'pinned_importer_sha':__import__('os').environ['PINNED_APP_SHA'],
+            'history_rows':len(plan['history_rows']),
+            'quarantine_reason_counts':dict(sorted(partition.items())),
+            'history_reference_missing_or_orphan_count':unmatched,
+            'history_missing_date_literal_count':incomplete,
+            'duplicate_source_keys':0,
+            'duplicate_person_target_ids':0,
+            'plan_byte_count':len(raw),
+            'plan_storage':'EPHEMERAL_PRIVATE_RUNNER_ONLY_DELETED_ON_COMPLETION',
+            'temporal_projection':'NONE_ORIGINAL_OBSERVATIONS_ONLY',
+          })
+          print(json.dumps(public,ensure_ascii=False,sort_keys=True))
+          PY
+
+      - name: Remove source, private plan and tenant identifier
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/i3-private-person-plan.json" "$RUNNER_TEMP/i3-private-tenant"
+          rm -rf -- "$GITHUB_WORKSPACE/importer" "$GITHUB_WORKSPACE/source-active"
+
+      - name: Publish aggregate-only job summary
+        if: always()
+        shell: bash
+        run: |
+          echo "I3 Private plan attempt; immutable source SHA $PINNED_ACTIVE_SHA; importer SHA $PINNED_APP_SHA. Actual result is in prior redacted aggregate-only step. No Person APPLY. No plan/source artifact uploaded. Private plan deleted at end." >> "$GITHUB_STEP_SUMMARY"
