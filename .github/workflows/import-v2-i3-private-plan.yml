@@ -28,16 +28,11 @@ jobs:
         shell: bash
         env:
           PRIVATE_SOURCE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
-          ORIGINAL_ACTIVE_TOKEN: ${{ secrets.ACTIVE_READ_TOKEN }}
         run: |
           set -euo pipefail
           missing=0
           if [ -z "$PRIVATE_SOURCE_TOKEN" ]; then
             echo "BLOCKED: CHACHAM_LEV_READ_TOKEN missing"
-            missing=1
-          fi
-          if [ -z "$ORIGINAL_ACTIVE_TOKEN" ]; then
-            echo "BLOCKED: ACTIVE_READ_TOKEN not provisioned for private Active repository"
             missing=1
           fi
           if [ -z "$STAGING_DATABASE_URL" ]; then
@@ -56,23 +51,22 @@ jobs:
           fetch-depth: 1
           path: importer
 
-      - name: Checkout original immutable private Active commit
-        uses: actions/checkout@v4
-        with:
-          repository: toyro396133/active
-          ref: a06a837eaf36b83bc90fb86e2c3732978e29a58f
-          token: ${{ secrets.ACTIVE_READ_TOKEN }}
-          persist-credentials: false
-          fetch-depth: 1
-          path: source-active
-
-      - name: Verify exactly both pinned Git commit SHAs
+      - name: Verify embedded byte-identical Active sources and pinned importer
         shell: bash
         run: |
           set -euo pipefail
           test "$(git -C importer rev-parse HEAD)" = "$PINNED_APP_SHA" || exit 3
-          test "$(git -C source-active rev-parse HEAD)" = "$PINNED_ACTIVE_SHA" || exit 3
-          echo "PINNED_IMPORTER_AND_ACTIVE_COMMITS_VERIFIED"
+          # Git blob IDs were independently compared with original
+          # active@a06a837eaf36b83bc90fb86e2c3732978e29a58f.
+          cards="apps/active/Tables/נתונים_טבלאות_מקושרות/תורמים.csv"
+          history="apps/active/Tables/נתונים_טבלאות_מקושרות/שינוייםתורמים.csv"
+          test "$(git -C importer rev-parse "HEAD:$cards")" = "561957d7da5da2814e87af7af175edb7668f2441" || exit 3
+          test "$(git -C importer rev-parse "HEAD:$history")" = "80f36b9ec52c0f0a76cf66f188cf4659880e561e" || exit 3
+          test "$(wc -c < "importer/$cards")" -eq 1207345 || exit 3
+          test "$(wc -c < "importer/$history")" -eq 5543141 || exit 3
+          test "$(sha256sum "importer/$cards" | cut -d' ' -f1)" = "884117113471a43714c658e3485ad692fcd63dda51ac42070d85a3bf013c9cf3" || exit 3
+          test "$(sha256sum "importer/$history" | cut -d' ' -f1)" = "1f4791c2370e04886d94a817ea9dd371f12fd7ddbeab534f3fd725d8456cd869" || exit 3
+          echo "PINNED_IMPORTER_AND_IDENTICAL_ORIGINAL_ACTIVE_SOURCE_BYTES_VERIFIED"
 
       - name: Obtain exact target tenant from isolated Neon via read-only SQL
         shell: bash
@@ -121,7 +115,7 @@ jobs:
           sys.path.insert(0,str(root.resolve()))
           from person_intake import from_source_bytes
           from person_plan import canonical_json,digest,public_summary
-          active=Path('source-active/Tables/נתונים_טבלאות_מקושרות')
+          active=Path('importer/apps/active/Tables/נתונים_טבלאות_מקושרות')
           tenant=Path(__import__('os').environ['RUNNER_TEMP'],'i3-private-tenant').read_text()
           plan=from_source_bytes((active/'תורמים.csv').read_bytes(),
                                  (active/'שינוייםתורמים.csv').read_bytes(),tenant)
@@ -185,7 +179,7 @@ jobs:
         shell: bash
         run: |
           rm -f "$RUNNER_TEMP/i3-private-person-plan.json" "$RUNNER_TEMP/i3-private-tenant"
-          rm -rf -- "$GITHUB_WORKSPACE/importer" "$GITHUB_WORKSPACE/source-active"
+          rm -rf -- "$GITHUB_WORKSPACE/importer"
 
       - name: Publish aggregate-only job summary
         if: always()
