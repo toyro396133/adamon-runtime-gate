@@ -27,9 +27,12 @@ jobs:
     timeout-minutes: 25
     env:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
-      STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
       PROJECT_ID: fragrant-dream-21113210
       STAGING_BRANCH_ID: br-summer-frost-apf4ee36
+      PINNED_PERMANENT_BACKUP: br-little-mouse-apwdw1hk
+      PINNED_BACKUP_CREATED: '2026-10-28T02:40:42Z'
+      RESTORE_DATABASE_NAME: neondb
+      RESTORE_DATABASE_ROLE: neondb_owner
       BACKUP_BRANCH_ID: ${{ inputs.backup_branch_id }}
       EXPECTED_PROTECTED_SHA256: ${{ inputs.protected_sha256 }}
     steps:
@@ -37,13 +40,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -z "$NEON_API_KEY" ] || [ -z "$STAGING_DATABASE_URL" ]; then
+          if [ -z "$NEON_API_KEY" ]; then
             echo "Required private recovery credentials are not configured"
             exit 2
           fi
           [[ "$PROJECT_ID" == "fragrant-dream-21113210" ]]
           [[ "$STAGING_BRANCH_ID" == "br-summer-frost-apf4ee36" ]]
-          [[ "$BACKUP_BRANCH_ID" =~ ^br-[a-z0-9-]{8,60}$ ]]
+          [[ "$BACKUP_BRANCH_ID" == "$PINNED_PERMANENT_BACKUP" ]]
           [[ "$EXPECTED_PROTECTED_SHA256" =~ ^[a-f0-9]{64}$ ]]
 
       - name: Verify backup branch metadata
@@ -60,21 +63,45 @@ jobs:
             -o "$tmp"
           python3 - "$tmp" <<'PY'
           import json, os, sys
-          from datetime import datetime, timedelta, timezone
+          from datetime import datetime, timezone
           value = json.load(open(sys.argv[1], encoding='utf-8'))
           b = value.get('branch')
-          if not b or b.get('id') != os.environ['BACKUP_BRANCH_ID']:
-              raise SystemExit('BACKUP_BRANCH_ID_MISMATCH')
-          if b.get('project_id') != os.environ['PROJECT_ID']:
-              raise SystemExit('BACKUP_PROJECT_MISMATCH')
-          if b.get('parent_id') != os.environ['STAGING_BRANCH_ID']:
-              raise SystemExit('BACKUP_PARENT_MISMATCH')
-          if b.get('current_state') != 'ready':
-              raise SystemExit('BACKUP_NOT_READY')
-          expires = b.get('expires_at')
-          if not expires or datetime.fromisoformat(expires.replace('Z', '+00:00')) <= datetime.now(timezone.utc) + timedelta(hours=2):
-              raise SystemExit('BACKUP_EXPIRY_TOO_SOON')
+          if not isinstance(b, dict):
+              raise SystemExit('BACKUP_METADATA_MISSING')
+          expected = {
+              'id': os.environ['PINNED_PERMANENT_BACKUP'],
+              'project_id': os.environ['PROJECT_ID'],
+              'parent_id': os.environ['STAGING_BRANCH_ID'],
+              'created_at': os.environ['PINNED_BACKUP_CREATED'],
+              'current_state': 'ready',
+              'protected': True,
+              'init_source': 'parent-data',
+          }
+          if any(b.get(key) != val for key,val in expected.items()):
+              raise SystemExit('PERMANENT_BACKUP_IDENTITY_OR_PROTECTION_MISMATCH')
+          if b.get('expires_at') is not None or b.get('primary') is True or b.get('default') is True:
+              raise SystemExit('PERMANENT_BACKUP_EXPIRY_OR_ROLE_MISMATCH')
+          try:
+              dt = datetime.fromisoformat(b['created_at'].replace('Z','+00:00'))
+              assert dt <= datetime.now(timezone.utc)
+          except (ValueError,AssertionError):
+              raise SystemExit('PERMANENT_BACKUP_CREATION_INVALID')
           PY
+
+      - name: Assert protected backup has no attached PostgreSQL compute
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp)"
+          chmod 600 "$tmp"
+          trap 'rm -f "$tmp"' EXIT
+          curl --silent --show-error --fail \
+            -H "Authorization: Bearer $NEON_API_KEY" \
+            -H "Accept: application/json" \
+            "https://console.neon.tech/api/v2/projects/$PROJECT_ID/endpoints" -o "$tmp"
+          jq -e --arg branch "$BACKUP_BRANCH_ID" \
+            '(.endpoints | type == "array") and ([.endpoints[] | select(.branch_id == $branch)] | length == 0)' \
+            "$tmp" > /dev/null || { echo "PROTECTED_BACKUP_HAS_ACTIVE_COMPUTE_OR_UNKNOWN_ENDPOINTS"; exit 4; }
 
       - name: Restore backup to disposable branch and verify
         shell: bash
@@ -102,18 +129,10 @@ jobs:
           }
           trap cleanup EXIT
 
-          # Derive only database/role names from the protected staging URI.
-          # Never print, echo, or persist the URI or password.
-          eval "$(python3 - <<'PY'
-          import os, shlex
-          from urllib.parse import urlsplit, unquote
-          u=urlsplit(os.environ['STAGING_DATABASE_URL'])
-          if u.scheme not in ('postgres','postgresql') or not u.hostname or not u.username or not u.path:
-              raise SystemExit('INVALID_STAGING_DATABASE_URI')
-          print('DB_NAME='+shlex.quote(unquote(u.path.lstrip('/'))))
-          print('DB_ROLE='+shlex.quote(unquote(u.username)))
-          PY
-          )"
+          # Fixed Neon database/role metadata; only the exact child branch
+          # obtained from the private Neon API is a permitted SQL target.
+          DB_NAME="$RESTORE_DATABASE_NAME"
+          DB_ROLE="$RESTORE_DATABASE_ROLE"
 
           name="i3-restore-verify-$GITHUB_RUN_ID"
           payload="$(jq -cn --arg name "$name" --arg parent "$BACKUP_BRANCH_ID" \
@@ -157,7 +176,7 @@ jobs:
           restore_uri="$(jq -er '.uri' "$work/connection.json")"
           [[ "$restore_uri" == postgresql://* || "$restore_uri" == postgres://* ]]
 
-          result="$(psql "$restore_uri" -X -qAt -v ON_ERROR_STOP=1 -c "
+          result="$(PGOPTIONS='-c default_transaction_read_only=on' psql "$restore_uri" -X -qAt -v ON_ERROR_STOP=1 -c "
             SELECT concat_ws('|',
               current_setting('neon.project_id',true),
               current_setting('neon.branch_id',true),
