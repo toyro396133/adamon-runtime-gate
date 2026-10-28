@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      ACCEPTED_TEST_SHA: c6729cdc48005c1c8560794823253063cd28b4d3
+      ACCEPTED_TEST_SHA: 68e81e1bd3926a27c78247a3605bcb153cd8ce64
     steps:
       - name: Require pre-existing private source read token
         env:
@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: c6729cdc48005c1c8560794823253063cd28b4d3
+          ref: 68e81e1bd3926a27c78247a3605bcb153cd8ce64
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
@@ -59,6 +59,10 @@ jobs:
       - name: Test exact restore-run binding, workflow pin and owner receipts
         working-directory: private-source
         run: node --test tests/import-v2/i3_apply_preflight.test.mjs
+
+      - name: Test Python writer key separation and fail-closed gate
+        working-directory: private-source
+        run: python3 -m unittest discover -s tests/import-v2 -p 'test_person_writer.py' -v
 
       - name: Remove private source without publishing artifacts
         if: always()
