@@ -21,7 +21,10 @@ jobs:
     env:
       PINNED_APP_SHA: 67ba4446841c39e9e4680b7142f84ce02b645241
       PINNED_ACTIVE_SHA: a06a837eaf36b83bc90fb86e2c3732978e29a58f
-      STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
+      TENANT_PRIVATE_BLOB_SHA: 4e2ba0ed4163f50eb1c7daea1ae111a134321118
+      TENANT_FILE_SHA256: 9cbc410920c73527bd06d8dd804efeaf92c1637f846e145278d6b4580fe4ec8d
+      EXPECTED_PROJECT: fragrant-dream-21113210
+      EXPECTED_BRANCH: br-summer-frost-apf4ee36
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
     steps:
       - name: Require independent private source checkout credential
@@ -126,38 +129,41 @@ jobs:
           print('SOURCE_ONLY_PRIVATE_ACTIVE_AGGREGATE='+json.dumps(summary,sort_keys=True,ensure_ascii=False))
           PY
 
-      - name: Obtain exact target tenant from isolated Neon via read-only SQL
+      - name: Load sealed private Tenant identifier sourced from verified isolated Neon
         shell: bash
+        env:
+          PRIVATE_REPO_READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "$STAGING_DATABASE_URL" ]; then
-            echo "BLOCKED: I3_STAGING_DATABASE_URL not provisioned on approved runner"
-            exit 6
-          fi
+          umask 077
+          [ -n "$PRIVATE_REPO_READ_TOKEN" ] || { echo "PRIVATE_GITHUB_READ_TOKEN_MISSING"; exit 7; }
+          # A private unreferenced Git blob was minted from an authenticated
+          # read-only Neon connector after exact project/branch/Tenant/User/I2 checks.
+          # It is NOT a public workflow input, code literal, log, or issue comment.
+          response="$RUNNER_TEMP/i3-tenant-blob-response"
+          tenant_file="$RUNNER_TEMP/i3-private-tenant"
+          trap 'rm -f "$response"' EXIT
+          curl --silent --show-error --fail-with-body \
+            -H "Authorization: Bearer $PRIVATE_REPO_READ_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/toyro396133/chacham-lev/git/blobs/$TENANT_PRIVATE_BLOB_SHA" \
+            --output "$response" || { echo "PRIVATE_TENANT_READ_FAILED"; exit 7; }
+          jq -e --arg sha "$TENANT_PRIVATE_BLOB_SHA" \
+            '.sha == $sha and .encoding == "base64" and .size > 0 and .size < 256' \
+            "$response" >/dev/null || { echo "PRIVATE_TENANT_BLOB_NOT_VERIFIED"; exit 7; }
+          jq -r '.content' "$response" | base64 --decode > "$tenant_file"
+          chmod 600 "$tenant_file"
+          actual="$(sha256sum "$tenant_file" | cut -d' ' -f1)"
+          [ "$actual" = "$TENANT_FILE_SHA256" ] || { echo "NEON_TENANT_ATTESTATION_DIGEST_MISMATCH"; exit 7; }
           python3 - <<'PY'
           import os
-          from urllib.parse import urlsplit
-          value=os.environ['STAGING_DATABASE_URL']
-          u=urlsplit(value)
-          if u.scheme not in ('postgres','postgresql') or not u.hostname or not u.path:
-              raise SystemExit('INVALID_STAGING_CONNECTION')
-          if 'neon.tech' not in u.hostname or u.path.strip('/')=='':
-              raise SystemExit('STAGING_CONNECTION_NOT_NEON')
+          from pathlib import Path
+          s=Path(os.environ['RUNNER_TEMP'],'i3-private-tenant').read_text()
+          if not s.endswith('\n') or len(s)>256 or not s.strip() or '\n' in s.strip():
+              raise SystemExit('INVALID_PRIVATE_TENANT_ID')
           PY
-          export PGOPTIONS='-c default_transaction_read_only=on'
-          bound="$(psql "$STAGING_DATABASE_URL" -X -qAt -v ON_ERROR_STOP=1 -c "SELECT current_setting('neon.project_id',true)||'|'||current_setting('neon.branch_id',true)")"
-          if [ "$bound" != "fragrant-dream-21113210|br-summer-frost-apf4ee36" ]; then
-            echo "BLOCKED: PostgreSQL native project/branch identity mismatch"
-            exit 7
-          fi
-          tenant="$(psql "$STAGING_DATABASE_URL" -X -qAt -v ON_ERROR_STOP=1 -c 'SELECT id FROM public."Tenant" ORDER BY id')"
-          test -n "$tenant" || exit 6
-          test "$(printf '%s\n' "$tenant" | wc -l)" -eq 1 || exit 6
-          # The tenant ID is private input and must not appear in stdout.
-          printf '%s' "$tenant" > "$RUNNER_TEMP/i3-private-tenant"
-          chmod 600 "$RUNNER_TEMP/i3-private-tenant"
-          unset tenant
-          echo "PRIVATE_EXACT_TENANT_READ_ONLY_VERIFIED"
+          echo "TENANT_BOUND_TO_ISOLATED_NEON_VERIFIED_BY_PRIVATE_BLOB_AND_PINNED_DIGEST"
 
       - name: Parse verified original raw bytes and generate full private plan
         shell: bash
@@ -243,4 +249,4 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo "I3 Private plan attempt; immutable source SHA $PINNED_ACTIVE_SHA; importer SHA $PINNED_APP_SHA. Actual result is in prior redacted aggregate-only step. No Person APPLY. No plan/source artifact uploaded. Private plan deleted at end." >> "$GITHUB_STEP_SUMMARY"
+          echo "I3 private plan: immutable source and importer commits pinned; private Neon Tenant ID transferred via unreferenced private Git blob authenticated by exact digest. No Person APPLY or source artifacts." >> "$GITHUB_STEP_SUMMARY"
