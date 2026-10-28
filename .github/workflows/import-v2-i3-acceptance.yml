@@ -1,0 +1,137 @@
+name: Chacham Lev IMPORT-V2 I3 isolated acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/import-v2-i3-acceptance.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: import-v2-i3-realpg-acceptance
+  cancel-in-progress: false
+
+jobs:
+  i3-native:
+    name: I3 native PG ${{ matrix.pg }} + Python + TypeScript + Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [17, 18]
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: import_v2_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d import_v2_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      ACCEPTED_TEST_SHA: 541900ac07cc8c7870a40f782c712369b8985d6a
+      DATABASE_URL: postgresql://postgres:synthetic-ci-only@127.0.0.1:5432/import_v2_test
+      NEXTAUTH_SECRET: disposable-ci-nextauth-secret-no-real-users
+      AUTH_SECRET: disposable-ci-auth-secret-no-real-users
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Require pre-existing authorized private read secret
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$READ_TOKEN" ]; then
+            echo 'ENVIRONMENT: private source token unavailable'
+            exit 2
+          fi
+
+      - name: Checkout exact private PR SHA, without persisting credentials
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 541900ac07cc8c7870a40f782c712369b8985d6a
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: private-source
+
+      - name: Assert exact private HEAD
+        working-directory: private-source
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$ACCEPTED_TEST_SHA" || exit 4
+          echo "Pinned candidate: $ACCEPTED_TEST_SHA"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Install frozen private dependencies
+        working-directory: private-source
+        run: pnpm install --frozen-lockfile
+
+      - name: Python focused I3 pure writer/plan tests
+        working-directory: private-source
+        run: python3 -m unittest discover -s tests/import-v2 -p 'test_person*.py' -v
+
+      - name: Generate Prisma client
+        working-directory: private-source
+        run: pnpm exec prisma generate
+
+      - name: Create disposable native PG schema
+        working-directory: private-source
+        run: pnpm exec prisma db push --skip-generate
+
+      - name: Native PostgreSQL transaction rollback, concurrent retry, protected I2 guard
+        working-directory: private-source
+        run: node tests/import-v2/i3_native_pg_acceptance.mjs
+
+      - name: PGlite-focused authorized source reader and negative tests
+        working-directory: private-source
+        run: |
+          pnpm add --save-dev --lockfile=false @electric-sql/pglite@0.5.12
+          python3 tests/import-v2/identity_fixture.py "$RUNNER_TEMP/i3-small.json"
+          pnpm exec prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > "$RUNNER_TEMP/i3-schema.sql"
+          pnpm exec tsx tests/import-v2/identity_sql_reader_rehearsal.ts "$RUNNER_TEMP/i3-schema.sql" "$RUNNER_TEMP/i3-small.json"
+          rm -f "$RUNNER_TEMP/i3-small.json"
+
+      - name: Verify external preflight syntax (no credentials, no approvals)
+        working-directory: private-source
+        run: node --check scripts/import-v2/i3_apply_preflight.mjs
+
+      - name: Full project TypeScript
+        working-directory: private-source
+        run: pnpm exec tsc --noEmit
+
+      - name: Full Next.js production build
+        working-directory: private-source
+        run: pnpm run build
+
+      - name: Always record bounded acceptance
+        if: always()
+        shell: bash
+        run: |
+          echo "## I3 isolated acceptance - PostgreSQL ${{ matrix.pg }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR228 exact SHA: $ACCEPTED_TEST_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Only generated synthetic identities; real people APPLY: never" >> "$GITHUB_STEP_SUMMARY"
+          echo "No Neon or Production connections" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove private checkout and generated fixture
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/private-source"
+          rm -f -- "$RUNNER_TEMP/i3-small.json" "$RUNNER_TEMP/i3-schema.sql"
