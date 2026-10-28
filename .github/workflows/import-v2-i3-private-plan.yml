@@ -31,18 +31,20 @@ jobs:
           ORIGINAL_ACTIVE_TOKEN: ${{ secrets.ACTIVE_READ_TOKEN }}
         run: |
           set -euo pipefail
+          missing=0
           if [ -z "$PRIVATE_SOURCE_TOKEN" ]; then
             echo "BLOCKED: CHACHAM_LEV_READ_TOKEN missing"
-            exit 2
+            missing=1
           fi
           if [ -z "$ORIGINAL_ACTIVE_TOKEN" ]; then
             echo "BLOCKED: ACTIVE_READ_TOKEN not provisioned for private Active repository"
-            exit 2
+            missing=1
           fi
           if [ -z "$STAGING_DATABASE_URL" ]; then
             echo "BLOCKED: I3_STAGING_DATABASE_URL not provisioned"
-            exit 2
+            missing=1
           fi
+          if [ "$missing" -ne 0 ]; then exit 2; fi
 
       - name: Checkout pinned private importer (no persisted credentials)
         uses: actions/checkout@v4
