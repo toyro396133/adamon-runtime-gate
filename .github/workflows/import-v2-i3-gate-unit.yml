@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      ACCEPTED_TEST_SHA: 8bf2747b0c882374e3a4d38bd19cf60e445cb58f
+      ACCEPTED_TEST_SHA: 67ba4446841c39e9e4680b7142f84ce02b645241
     steps:
       - name: Require pre-existing private source read token
         env:
@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 8bf2747b0c882374e3a4d38bd19cf60e445cb58f
+          ref: 67ba4446841c39e9e4680b7142f84ce02b645241
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
