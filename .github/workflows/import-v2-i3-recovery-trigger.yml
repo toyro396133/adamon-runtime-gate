@@ -1,0 +1,36 @@
+name: I3 dispatch exact pinned backup restore verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/import-v2-i3-recovery-trigger.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch reviewed immutable I3 backup recovery workflow
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          payload='{"ref":"main","inputs":{"backup_branch_id":"br-little-mouse-apwdw1hk","protected_sha256":"23bbbb63a8dfd3092e95ce90df6bfa8edf3b908a16e2c099ea3a735b62130883"}}'
+          http="$(curl --silent --show-error --output "$RUNNER_TEMP/i3-dispatch-response" --write-out '%{http_code}' \
+            --request POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/toyro396133/adamon-runtime-gate/actions/workflows/i3-backup-recovery.yml/dispatches" \
+            --data "$payload")"
+          rm -f "$RUNNER_TEMP/i3-dispatch-response"
+          if [ "$http" != "204" ]; then
+            echo "I3_RECOVERY_DISPATCH_DENIED_HTTP_$http"
+            exit 2
+          fi
+          echo "I3_EXACT_BACKUP_RECOVERY_DISPATCHED_NOT_YET_VERIFIED"
