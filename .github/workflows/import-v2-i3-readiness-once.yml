@@ -1,0 +1,74 @@
+name: I3 import runtime readiness
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/import-v2-i3-readiness-once.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  readiness:
+    if: github.repository == 'toyro396133/adamon-runtime-gate' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Check credentials and isolated target using read-only requests
+        shell: bash
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          CHACHAM_LEV_READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          I3_STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
+          I3_SOURCE_EVIDENCE_MAC_KEY: ${{ secrets.I3_SOURCE_EVIDENCE_MAC_KEY }}
+          I3_PREFLIGHT_SIGNATURE_KEY: ${{ secrets.I3_PREFLIGHT_SIGNATURE_KEY }}
+        run: |
+          set -uo pipefail
+          export LC_ALL=C
+          failed=0
+          for name in NEON_API_KEY CHACHAM_LEV_READ_TOKEN I3_STAGING_DATABASE_URL I3_SOURCE_EVIDENCE_MAC_KEY I3_PREFLIGHT_SIGNATURE_KEY; do
+            if [[ -n "${!name}" ]]; then
+              echo "$name=PRESENT"
+            else
+              echo "$name=MISSING"
+              failed=1
+            fi
+          done
+          if [[ -n "$GH_TOKEN" ]]; then
+            echo 'GITHUB_RECEIPT_TOKEN=GH_TOKEN'
+          else
+            GH_TOKEN="$CHACHAM_LEV_READ_TOKEN"
+            echo 'GITHUB_RECEIPT_TOKEN=CHACHAM_LEV_READ_TOKEN_FALLBACK'
+          fi
+          base=https://api.github.com/repos/toyro396133/chacham-lev
+          for check in pulls/228 issues/comments/6461261466; do
+            if [[ -n "$GH_TOKEN" ]] && curl --silent --fail --max-time 15 -o /dev/null -H "Authorization: Bearer $GH_TOKEN" "$base/$check" 2>/dev/null; then
+              echo "GITHUB_READ_$check=PASS"
+            else
+              echo "GITHUB_READ_$check=FAIL"
+              failed=1
+            fi
+          done
+          if [[ -n "$CHACHAM_LEV_READ_TOKEN" ]] && curl --silent --fail --max-time 15 -o /dev/null -H "Authorization: Bearer $CHACHAM_LEV_READ_TOKEN" "$base/git/commits/a06a837eaf36b83bc90fb86e2c3732978e29a58f" 2>/dev/null; then
+            echo 'PRIVATE_SOURCE_COMMIT_READ=PASS'
+          else
+            echo 'PRIVATE_SOURCE_COMMIT_READ=FAIL'
+            failed=1
+          fi
+          if [[ ${#I3_SOURCE_EVIDENCE_MAC_KEY} -ge 32 && ${#I3_PREFLIGHT_SIGNATURE_KEY} -ge 32 && "$I3_SOURCE_EVIDENCE_MAC_KEY" != "$I3_PREFLIGHT_SIGNATURE_KEY" ]]; then
+            echo 'SIGNING_KEYS_LENGTH_AND_SEPARATION=PASS'
+          else
+            echo 'SIGNING_KEYS_LENGTH_AND_SEPARATION=FAIL'
+            failed=1
+          fi
+          if [[ -n "$I3_STAGING_DATABASE_URL" ]]; then
+            result=$(PGDATABASE="$I3_STAGING_DATABASE_URL" PGOPTIONS='-c default_transaction_read_only=on' PGCONNECT_TIMEOUT=10 timeout 20s psql -XqAtw -v ON_ERROR_STOP=1 -c "SELECT coalesce(current_setting('neon.project_id',true)='fragrant-dream-21113210' AND current_setting('neon.branch_id',true)='br-summer-frost-apf4ee36' AND current_setting('transaction_read_only')='on',false)" 2>/dev/null) || result=''
+            if [[ "$result" == t ]]; then
+              echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=PASS'
+            else
+              echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=FAIL'
+              failed=1
+            fi
+          else
+            echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=SKIPPED_MISSING_URL'
+          fi
+          exit "$failed"
