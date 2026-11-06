@@ -1,0 +1,108 @@
+name: Concept Lab PR6 isolated world-memory experiment
+on:
+  push:
+    branches:
+      - ci/concept-lab-pr6-credit-20261106
+    paths:
+      - .github/workflows/concept-lab-pr6-credit-20261106.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: concept-lab-pr6-credit-20261106
+  cancel-in-progress: false
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout frozen model code only
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 99eb7dcdc3d853d86a85c510c35d5d0946375730
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Check frozen code SHA and all Python tests
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "99eb7dcdc3d853d86a85c510c35d5d0946375730"
+          python -m unittest discover -s tests -v
+
+  credit-development:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout frozen model code
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 99eb7dcdc3d853d86a85c510c35d5d0946375730
+          path: source
+          persist-credentials: false
+      - name: Checkout frozen development documents
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f991e4f201364294af866b0add51793e9a7a57bc
+          path: data
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Extract text only; exclude QA and identity ledger
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('data/concept-discovery-v2/data_progressive/worlds/world_01/documents.jsonl')
+          rows=[json.loads(x) for x in p.read_text(encoding='utf8').splitlines() if x.strip()]
+          assert len(rows)==12 and all(type(x.get('text')) is str and x['text'].strip() for x in rows)
+          dest=Path('source/concept-discovery-v2/results/credit-development-input.jsonl')
+          dest.write_text(''.join(json.dumps({'text':row['text']},ensure_ascii=False)+'\n' for row in rows),encoding='utf8')
+          assert all(set(json.loads(x))=={'text'} for x in dest.read_text(encoding='utf8').splitlines())
+          print('Development text-only documents:',len(rows))
+          PY
+      - name: Run matched-source world versus credit, three seeds
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "99eb7dcdc3d853d86a85c510c35d5d0946375730"
+          python -m research.run_world_memory results/credit-development-input.jsonl \
+            --source-sha f991e4f201364294af866b0add51793e9a7a57bc \
+            --output results/credit-development-results.json \
+            --variants world credit --seeds 7 17 29 --epochs 2
+      - name: Record public numerical summary only
+        if: success()
+        working-directory: source/concept-discovery-v2
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          d=json.loads(Path('results/credit-development-results.json').read_text(encoding='utf8'))
+          rows=[]
+          for r in d['runs']:
+              row={k:r[k] for k in ('variant','seed','parameters','nodes','edges','templates','accuracy','mean_nll','oov','seconds','evaluation_actions','credit_policy_loss')}
+              rows.append(row)
+              print(json.dumps(row,ensure_ascii=False))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a',encoding='utf8') as f:
+              f.write('## PR6 world-memory development (not blind; W1 blocked)\n\n')
+              f.write('Frozen model SHA: 99eb7dcdc3d853d86a85c510c35d5d0946375730\n\n')
+              f.write('Frozen source SHA: f991e4f201364294af866b0add51793e9a7a57bc\n\n')
+              f.write('| Variant | Seed | Nodes | Accuracy | Mean NLL | OOV | Seconds |\n|---|---:|---:|---:|---:|---:|---:|\n')
+              for r in rows:
+                  f.write(f"| {r['variant']} | {r['seed']} | {r['nodes']} | {r['accuracy']:.4f} | {r['mean_nll']:.4f} | {r['oov']} | {r['seconds']:.1f} |\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concept-lab-pr6-credit-development-metrics
+          path: source/concept-discovery-v2/results/credit-development-results.json
+          if-no-files-found: ignore
