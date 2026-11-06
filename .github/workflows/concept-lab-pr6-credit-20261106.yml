@@ -16,12 +16,22 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
+      - name: Require read-only private Concept Lab token
+        env:
+          READ_TOKEN: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+        shell: bash
+        run: |
+          if test -z "$READ_TOKEN"; then
+            echo "::error::ENVIRONMENT: RECURSIVE_CONCEPTS_READ_TOKEN is missing in adamon-runtime-gate Actions secrets."
+            exit 1
+          fi
       - name: Checkout frozen model code only
         uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
           ref: 99eb7dcdc3d853d86a85c510c35d5d0946375730
           path: source
+          token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -38,12 +48,22 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
+      - name: Require read-only private Concept Lab token
+        env:
+          READ_TOKEN: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+        shell: bash
+        run: |
+          if test -z "$READ_TOKEN"; then
+            echo "::error::ENVIRONMENT: RECURSIVE_CONCEPTS_READ_TOKEN is missing in adamon-runtime-gate Actions secrets."
+            exit 1
+          fi
       - name: Checkout frozen model code
         uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
           ref: 99eb7dcdc3d853d86a85c510c35d5d0946375730
           path: source
+          token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
       - name: Checkout frozen development documents
         uses: actions/checkout@v4
@@ -51,6 +71,7 @@ jobs:
           repository: toyro396133/recursive-concepts-lab
           ref: f991e4f201364294af866b0add51793e9a7a57bc
           path: data
+          token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
