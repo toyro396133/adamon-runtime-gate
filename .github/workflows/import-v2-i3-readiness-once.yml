@@ -40,18 +40,23 @@ jobs:
             echo 'GITHUB_RECEIPT_TOKEN=CHACHAM_LEV_READ_TOKEN_FALLBACK'
           fi
           base=https://api.github.com/repos/toyro396133/chacham-lev
+          http_status() {
+            curl --silent --max-time 15 -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $1" "$2" 2>/dev/null || true
+          }
           for check in pulls/228 issues/comments/6461261466; do
-            if [[ -n "$GH_TOKEN" ]] && curl --silent --fail --max-time 15 -o /dev/null -H "Authorization: Bearer $GH_TOKEN" "$base/$check" 2>/dev/null; then
+            status=$(http_status "$GH_TOKEN" "$base/$check")
+            if [[ -n "$GH_TOKEN" && "$status" == 200 ]]; then
               echo "GITHUB_READ_$check=PASS"
             else
-              echo "GITHUB_READ_$check=FAIL"
+              echo "GITHUB_READ_$check=FAIL_HTTP_$status"
               failed=1
             fi
           done
-          if [[ -n "$CHACHAM_LEV_READ_TOKEN" ]] && curl --silent --fail --max-time 15 -o /dev/null -H "Authorization: Bearer $CHACHAM_LEV_READ_TOKEN" "$base/git/commits/a06a837eaf36b83bc90fb86e2c3732978e29a58f" 2>/dev/null; then
+          status=$(http_status "$CHACHAM_LEV_READ_TOKEN" "$base/git/commits/a06a837eaf36b83bc90fb86e2c3732978e29a58f")
+          if [[ -n "$CHACHAM_LEV_READ_TOKEN" && "$status" == 200 ]]; then
             echo 'PRIVATE_SOURCE_COMMIT_READ=PASS'
           else
-            echo 'PRIVATE_SOURCE_COMMIT_READ=FAIL'
+            echo "PRIVATE_SOURCE_COMMIT_READ=FAIL_HTTP_$status"
             failed=1
           fi
           if [[ ${#I3_SOURCE_EVIDENCE_MAC_KEY} -ge 32 && ${#I3_PREFLIGHT_SIGNATURE_KEY} -ge 32 && "$I3_SOURCE_EVIDENCE_MAC_KEY" != "$I3_PREFLIGHT_SIGNATURE_KEY" ]]; then
