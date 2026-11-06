@@ -52,13 +52,18 @@ jobs:
               failed=1
             fi
           done
-          status=$(http_status "$CHACHAM_LEV_READ_TOKEN" "$base/git/commits/a06a837eaf36b83bc90fb86e2c3732978e29a58f")
-          if [[ -n "$CHACHAM_LEV_READ_TOKEN" && "$status" == 200 ]]; then
-            echo 'PRIVATE_SOURCE_COMMIT_READ=PASS'
-          else
-            echo "PRIVATE_SOURCE_COMMIT_READ=FAIL_HTTP_$status"
-            failed=1
-          fi
+          for item in '561957d7da5da2814e87af7af175edb7668f2441:884117113471a43714c658e3485ad692fcd63dda51ac42070d85a3bf013c9cf3' '80f36b9ec52c0f0a76cf66f188cf4659880e561e:1f4791c2370e04886d94a817ea9dd371f12fd7ddbeab534f3fd725d8456cd869'; do
+            blob=${item%%:*}
+            expected=${item#*:}
+            actual=$(curl --silent --fail --max-time 30 -H "Authorization: Bearer $CHACHAM_LEV_READ_TOKEN" "$base/git/blobs/$blob" | jq -er '.content' | base64 --decode | sha256sum | cut -d' ' -f1) || actual=''
+            if [[ "$actual" == "$expected" ]]; then
+              echo "PRIVATE_SOURCE_BLOB_$blob=PASS"
+            else
+              status=$(http_status "$CHACHAM_LEV_READ_TOKEN" "$base/git/blobs/$blob")
+              echo "PRIVATE_SOURCE_BLOB_$blob=FAIL_HTTP_$status"
+              failed=1
+            fi
+          done
           if [[ ${#I3_SOURCE_EVIDENCE_MAC_KEY} -ge 32 && ${#I3_PREFLIGHT_SIGNATURE_KEY} -ge 32 && "$I3_SOURCE_EVIDENCE_MAC_KEY" != "$I3_PREFLIGHT_SIGNATURE_KEY" ]]; then
             echo 'SIGNING_KEYS_LENGTH_AND_SEPARATION=PASS'
           else
