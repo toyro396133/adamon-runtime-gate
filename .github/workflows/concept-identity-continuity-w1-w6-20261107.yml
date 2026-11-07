@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 7e0769b394429504cdb0cf7111b8ee1def04fd3e
+          ref: c931fdbb6312cdbdebd5cced9f87792cdc06a5bf
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -40,7 +40,7 @@ jobs:
       - name: Pin exact code/data and check both PR12 files before training
         shell: bash
         run: |
-          test "$(git -C source rev-parse HEAD)" = "7e0769b394429504cdb0cf7111b8ee1def04fd3e"
+          test "$(git -C source rev-parse HEAD)" = "c931fdbb6312cdbdebd5cced9f87792cdc06a5bf"
           test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
           find pr12-checkpoints -type f -name 'continued-seed-*.pt' -exec sha256sum {} \;
           test "$(find pr12-checkpoints -type f -name 'continued-seed-*.pt' | wc -l)" -eq 2
