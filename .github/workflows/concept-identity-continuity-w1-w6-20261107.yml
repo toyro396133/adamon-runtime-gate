@@ -1,0 +1,64 @@
+name: Concept Lab W1-W6 identity continuity from PR12
+on:
+  push:
+    branches: [ci/concept-identity-continuity-w1-w6-20261107]
+    paths: [.github/workflows/concept-identity-continuity-w1-w6-20261107.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  continuing-identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - name: Verify existing read-only source token
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Missing RECURSIVE_CONCEPTS_READ_TOKEN"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: b3e8b71a106870a8d42fcee3c04b67f788874215
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f991e4f201364294af866b0add51793e9a7a57bc
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: data
+      - name: Download FINAL post-training PR12 checkpoints (NOT PR11)
+        uses: actions/download-artifact@v4
+        with:
+          name: emergent-ae-resumed-pr11-checkpoints-and-metrics
+          run-id: 42413229860
+          github-token: '${{ github.token }}'
+          path: pr12-checkpoints
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Pin exact code/data and check both PR12 files before training
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "b3e8b71a106870a8d42fcee3c04b67f788874215"
+          test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
+          find pr12-checkpoints -type f -name 'continued-seed-*.pt' -exec sha256sum {} \;
+          test "$(find pr12-checkpoints -type f -name 'continued-seed-*.pt' | wc -l)" -eq 2
+      - name: Focused checkpoint/identity and previous structural safety
+        working-directory: source/concept-discovery-v2
+        run: python -m unittest tests.test_identity_continuity tests.test_emergent_chain -v
+      - name: Run actual W1-W6 continuation, physical write, natural contradiction, controls
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -m research.neural_units.identity_continuity_study \
+             --data-root ../../data --checkpoints ../../pr12-checkpoints \
+             --output results/identity-w1-w6 --seeds 7 17
+      - name: Persist JSON results and post-training neural state checkpoints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-w1-w6-pr12-continuation-states
+          path: |
+            source/concept-discovery-v2/results/identity-w1-w6/identity-continuity-results.json
+            source/concept-discovery-v2/results/identity-w1-w6/identity-continued-seed-*.pt
+          if-no-files-found: warn
