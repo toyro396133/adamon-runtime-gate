@@ -1,0 +1,67 @@
+name: Recursive Concepts Lab PR15 three memory and roots
+on:
+  push:
+    branches: [ci/concept-three-memory-root-20261107]
+    paths: [.github/workflows/concept-three-memory-root-20261107.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  continue-pr13:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - name: Validate existing read-only source access
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::RECURSIVE_CONCEPTS_READ_TOKEN missing"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f475e216a38a15de5ec232ff41d96f5fdd94b7b0
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f991e4f201364294af866b0add51793e9a7a57bc
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: data
+      - name: Download the last TWO trained PR13 checkpoints, not PR11/12
+        uses: actions/download-artifact@v4
+        with:
+          name: identity-w1-w6-pr12-continuation-states
+          run-id: 42415617082
+          github-token: '${{ github.token }}'
+          path: pr13-trained-checkpoints
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU training runtime
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Check immutable pinned source/data and both exact predecessor files
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "f475e216a38a15de5ec232ff41d96f5fdd94b7b0"
+          test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
+          test -s source/concept-discovery-v2/research/neural_units/RESEARCH_PRINCIPLES_HE.md
+          test -s source/concept-discovery-v2/AGENTS.md
+          find pr13-trained-checkpoints -type f -name 'identity-continued-seed-*.pt' -exec sha256sum {} \;
+          test "$(find pr13-trained-checkpoints -type f -name 'identity-continued-seed-*.pt' | wc -l)" -eq 2
+      - name: Focused safety and local/train/root neural tests
+        working-directory: source/concept-discovery-v2
+        run: python -m unittest tests.test_memory_hierarchy tests.test_identity_continuity tests.test_emergent_chain -v
+      - name: Resume real neural network, train root and test causal generalization
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -m research.neural_units.three_memory_root_study \
+            --data-root ../../data --checkpoints ../../pr13-trained-checkpoints \
+            --output results/three-memory-root --seeds 7 17
+      - name: Publish both post-continuation checkpoints, full train memory and numeric result JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: three-memory-root-pr13-continuation
+          path: |
+            source/concept-discovery-v2/results/three-memory-root/three_memory_root_results.json
+            source/concept-discovery-v2/results/three-memory-root/root-continued-seed-*.pt
+          if-no-files-found: warn
