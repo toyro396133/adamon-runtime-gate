@@ -1,0 +1,66 @@
+name: PR10 independent world-representation audit
+on:
+  push:
+    branches: [audit/pr10-world-representations-20261107]
+    paths: [.github/workflows/pr10-world-representations-audit.yml, audit/pr10_world_representations.py]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  pr10-world-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require existing read-only token
+        env:
+          READ_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: 'test -n "$READ_TOKEN"'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 207cb5a34b5c469e90a2ef131a530b2c44f3349d
+          path: source
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f991e4f201364294af866b0add51793e9a7a57bc
+          path: data
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyTorch CPU
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Download frozen PR10 policy checkpoints from original run
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          run-id: 42402717065
+          name: concept-lab-structural-growth-pilot
+          path: pilot
+          github-token: '${{ github.token }}'
+          repository: toyro396133/adamon-runtime-gate
+      - name: Verify pinned source and data commits
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = 207cb5a34b5c469e90a2ef131a530b2c44f3349d
+          test "$(git -C data rev-parse HEAD)" = f991e4f201364294af866b0add51793e9a7a57bc
+      - name: Audit PR4 chronological document representations
+        shell: bash
+        env:
+          PYTHONPATH: source/concept-discovery-v2
+        run: |
+          python audit/pr10_world_representations.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr10-independent-world-audit
+          path: world_audit/
+          if-no-files-found: warn
