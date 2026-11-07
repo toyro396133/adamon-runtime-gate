@@ -158,6 +158,7 @@ def audit_seed(seed):
     temporal_before=int(g.accepted)
     for e in range(2):
         stats.append(sess.train_structural(world_early[e*4:e*4+8],limit=12,write_cost=.0001))
+    world_temporal_accepted=int(g.accepted)-temporal_before
     learned=summary_metrics(model,probe)
     after_phrase=phrase_probes(model)
     slots=(g.protected & ~g.original_slots).nonzero().flatten().tolist()
@@ -191,6 +192,32 @@ def audit_seed(seed):
         scrambled_result=summary_metrics(scrambled,probe)
         scramble_difference=round(float((scrambled_result-old).abs().mean()),8)
     drift=float((old-no_write_ret).abs().mean())
+    # Equal accepted-write budget control: random free slots and random
+    # source/value document embeddings from TRAIN-ONLY windows.
+    # No model evaluation probe or QA is used to select these writes.
+    rand_model=copy.deepcopy(no_write)
+    rand_growth,rand_bank=rand_model.growth,rand_model.bootstrap
+    rng=random.Random(seed+299)
+    train_parts=[x for row in training_rows for x in row["documents"]]
+    train_emb=single_features(rand_model,train_parts)
+    random_slots=[]
+    with torch.no_grad():
+        for _ in range(len(incremental_slots)):
+            vacant=(~rand_growth.occupied).nonzero().flatten().tolist()
+            if not vacant:break
+            idx=rng.choice(vacant)
+            si=rng.randrange(len(train_parts)); vi=rng.randrange(len(train_parts))
+            proposal=Proposal(index=idx,decision=True,log_prob=torch.tensor(0.),
+                 source=F.normalize(train_emb[si],dim=-1),
+                 value=F.normalize(F.softplus(train_emb[vi,:16]),dim=-1),
+                 strength=torch.tensor(.6),retention=torch.tensor(.6),
+                 probability=torch.tensor(1.))
+            trans=rand_growth.write(rand_bank,proposal)
+            rand_growth.settle(rand_bank,trans,improvement=1.)
+            random_slots.append(idx)
+    random_ret=summary_metrics(rand_model,probe)
+    random_probe_delta=float((random_ret-no_write_ret).abs().mean())
+    random_phrase=phrase_probes(rand_model)
     protected=g.protected.detach().clone();anchors=g.anchor_enter.detach().clone()
     sess.save()
     restored_session=ConceptSession(session_path)
@@ -207,9 +234,12 @@ def audit_seed(seed):
      "growth_stats":stats,"continued_stats":cont,
      "occupied_before":occupied_pre,"occupied_after":int(g.occupied.sum()),
      "accepted_before":accepted_pre,"new_accepted":created_after,
-     "world_temporal_accepted":int(g.accepted)-temporal_before,
+     "world_temporal_accepted":world_temporal_accepted,
      "new_slots_sample":incremental_slots,"probe_count":len(probe),
      "matched_content_permutation_abs_delta":scramble_difference,
+     "matched_budget_random_writes":len(random_slots),
+     "matched_budget_random_probe_change":round(random_probe_delta,8),
+     "matched_budget_random_phrase_margins":random_phrase,
      "probe_retrieval_delta_vs_no_write":round(drift,8),
      "probe_retrieval_delta_vs_initial":round(delta,8),
      "incremental_pr4_ablation_mean_abs":round(causal,8),"incremental_pr4_ablation_restore_exact":exact,
