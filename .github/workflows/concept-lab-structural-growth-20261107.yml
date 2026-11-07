@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: f46f6b774c2e7b6eea88c82efefe4c432807c791
+          ref: e979ec8fe2aa335a0f8cf4f391a72d6acebdd45e
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           path: source
           persist-credentials: false
@@ -29,5 +29,5 @@ jobs:
         working-directory: source/concept-discovery-v2
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = f46f6b774c2e7b6eea88c82efefe4c432807c791
+          test "$(git rev-parse HEAD)" = e979ec8fe2aa335a0f8cf4f391a72d6acebdd45e
           python -m unittest tests.test_weight_bootstrap tests.test_structural_growth -v
