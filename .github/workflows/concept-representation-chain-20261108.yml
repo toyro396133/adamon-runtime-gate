@@ -1,0 +1,62 @@
+name: Concept Lab PR18 frozen representation-chain diagnosis
+on:
+  push:
+    branches: [ci/concept-representation-chain-20261108]
+    paths: [.github/workflows/concept-representation-chain-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  frozen-representation-diagnosis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Verify private source read token presence
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Read token missing"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 13bc9fefbaf3f22d3a90834a12714cca57a87ba2
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: predecessor-PR18
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU-only dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Verify pinned source and run two focused safety tests
+        working-directory: source/concept-discovery-v2
+        run: |
+          test "$(git rev-parse HEAD)" = "13bc9fefbaf3f22d3a90834a12714cca57a87ba2"
+          python -m unittest tests.test_representation_chain_diagnostic -v
+      - name: Frozen comparisons on inherited PR18 and sealed identities
+        shell: bash
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          cp_dir=../../predecessor-PR18
+          test "$(find "$cp_dir" -type f -name 'continued-interentity-seed-*.pt' | wc -l)" -eq 2
+          trainfile=$(find "$cp_dir" -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          sealedfile=$(find "$cp_dir" -type f -path '*/sealed/corpus/test.jsonl' | head -1)
+          test -n "$trainfile" && test -n "$sealedfile"
+          dataset=$(dirname "$(dirname "$trainfile")")
+          sealed=$(dirname "$(dirname "$sealedfile")")
+          python -u -m research.neural_units.representation_chain_diagnostic \
+            --checkpoints "$cp_dir" --dataset "$dataset" --sealed "$sealed" \
+            --output results/representation-chain.json --count 30
+          test -s results/representation-chain.json
+      - name: Save frozen diagnostic measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-pr18-representation-chain
+          path: source/concept-discovery-v2/results/representation-chain.json
+          if-no-files-found: warn
