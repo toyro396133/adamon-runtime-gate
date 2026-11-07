@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 065d48d0c88ca40dfcb8da7044f7ff026927f55c
+          ref: 210aa55cfa8e6af850a05b51872770d255b4535f
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           path: source
           persist-credentials: false
@@ -29,7 +29,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = 065d48d0c88ca40dfcb8da7044f7ff026927f55c
+          test "$(git rev-parse HEAD)" = 210aa55cfa8e6af850a05b51872770d255b4535f
           python -m unittest tests.test_weight_bootstrap tests.test_structural_growth -v
       - name: Learned versus controls on held-out Hebrew text
         working-directory: source/concept-discovery-v2
@@ -40,5 +40,7 @@ jobs:
         if: always()
         with:
           name: concept-lab-structural-growth-pilot
-          path: source/concept-discovery-v2/results/structural-study/structural-growth-metrics.json
+          path: |
+            source/concept-discovery-v2/results/structural-study/structural-growth-metrics.json
+            source/concept-discovery-v2/results/structural-study/seed-*.pt
           if-no-files-found: warn
