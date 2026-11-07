@@ -1,0 +1,73 @@
+name: Concept Lab PR9 isolated weight-bootstrap verification
+on:
+  push:
+    branches:
+      - ci/concept-lab-pr9-bootstrap-20261107
+    paths:
+      - .github/workflows/concept-lab-pr9-bootstrap-20261107.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: concept-lab-pr9-bootstrap-20261107
+  cancel-in-progress: false
+jobs:
+  neural-weight-programming:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Require read-only Concept Lab token
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+        run: |
+          if test -z "$READ_TOKEN"; then
+            echo "::error::ENVIRONMENT: read-only RECURSIVE_CONCEPTS_READ_TOKEN unavailable."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 4d97490d3f1114c7e3e333500f592da8e17494d4
+          path: source
+          token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU torch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Frozen SHA and targeted weight-space tests
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "4d97490d3f1114c7e3e333500f592da8e17494d4"
+          python -m unittest tests.test_weight_bootstrap -v
+      - name: Record capacity and exact programmed coefficients
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, torch, os
+          from backend.concept_system import ConceptSystem
+          torch.manual_seed(7)
+          net=ConceptSystem()
+          bank=net.bootstrap
+          report={
+            "code_sha":"4d97490d3f1114c7e3e333500f592da8e17494d4",
+            "base_units": net.config.circuits * net.config.units,
+            "bootstrap_bank_units": bank.circuits * bank.units,
+            "new_programmed_neurons":4*bank.features,
+            "total_parameters":sum(p.numel() for p in net.parameters()),
+            "bootstrap_gain_at_legacy_load":float(net.bootstrap_gain),
+            "compare_positive_coefficient":float(bank.enter.weight[bank.index(0,0),0]),
+            "compare_negative_coefficient":float(bank.enter.weight[bank.index(0,0),net.config.width]),
+            "recurrent_memory_coefficient":float(bank.synapses[3,0,0]),
+          }
+          print(json.dumps(report, sort_keys=True))
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+            out.write("## G1/G2 feature-level weight-space program only\n\n")
+            out.write("Frozen source SHA: `"+report["code_sha"]+"`\n\n")
+            out.write("Number of directly programmed neurons: "+str(report["new_programmed_neurons"])+"\n\n")
+            out.write("No semantic generalization or internal learning claim.\n")
+          PY
