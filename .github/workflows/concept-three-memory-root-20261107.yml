@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 1635686969655758b36dba14c59a41af8f57fa1e
+          ref: b22566a97e547cfbf9163d0b776c34bcfded1501
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -41,7 +41,7 @@ jobs:
       - name: Check immutable pinned source/data and both exact predecessor files
         shell: bash
         run: |
-          test "$(git -C source rev-parse HEAD)" = "1635686969655758b36dba14c59a41af8f57fa1e"
+          test "$(git -C source rev-parse HEAD)" = "b22566a97e547cfbf9163d0b776c34bcfded1501"
           test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
           test -s source/concept-discovery-v2/research/neural_units/RESEARCH_PRINCIPLES_HE.md
           test -s source/concept-discovery-v2/AGENTS.md
