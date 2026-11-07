@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: b1f42067893dc87ca94c457db952b34e38309816
+          ref: a8a55612396fc720543549a47b7e91a4f30c8927
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -40,7 +40,7 @@ jobs:
       - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Verify frozen code, data and two original checkpoint files
         run: |
-          test "$(git -C source rev-parse HEAD)" = "b1f42067893dc87ca94c457db952b34e38309816"
+          test "$(git -C source rev-parse HEAD)" = "a8a55612396fc720543549a47b7e91a4f30c8927"
           test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
           test "$(find pr11-checkpoints -name 'world-seed-*.pt' -type f | wc -l)" -eq 2
           find pr11-checkpoints -type f -name 'world-seed-*.pt' -exec sha256sum {} \;
