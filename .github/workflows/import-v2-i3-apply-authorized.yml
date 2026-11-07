@@ -1,0 +1,143 @@
+name: I3 authorized isolated import
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/import-v2-i3-apply-authorized.yml]
+permissions:
+  contents: read
+concurrency:
+  group: i3-isolated-data-apply
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: github.repository == 'toyro396133/adamon-runtime-gate' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      I3_CODE_SHA: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+      I3_PLAN_SHA: 51da6bf659949cc327755f4c9edfec995d88417a2f9a21a4b55d0c8e7ffe27a8
+      I3_APPROVAL_ID: '6710784520'
+    steps:
+      - name: Checkout exact approved private code and pinned source files
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: importer
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Install locked importer dependencies
+        working-directory: importer
+        run: |
+          if ! pnpm install --frozen-lockfile >/dev/null 2>&1; then
+            echo I3_DEPENDENCY_INSTALL_FAILED
+            exit 1
+          fi
+      - name: Rebuild private plan and verify exact approved digest
+        working-directory: importer
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          private="$RUNNER_TEMP/i3-apply-private"
+          mkdir -m 700 "$private"
+          test "$(git rev-parse HEAD)" = "$I3_CODE_SHA"
+          source_dir='apps/active/Tables/נתונים_טבלאות_מקושרות'
+          test "$(git rev-parse "HEAD:$source_dir/תורמים.csv")" = '561957d7da5da2814e87af7af175edb7668f2441'
+          test "$(git rev-parse "HEAD:$source_dir/שינוייםתורמים.csv")" = '80f36b9ec52c0f0a76cf66f188cf4659880e561e'
+          curl --silent --fail --max-time 20 -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/toyro396133/chacham-lev/issues/comments/$I3_APPROVAL_ID" \
+            >"$private/approval.json"
+          python3 - "$private" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+
+          private = Path(sys.argv[1])
+          approval = json.loads((private / 'approval.json').read_text())
+          ref = 'https://github.com/toyro396133/chacham-lev/issues/196#issuecomment-' + os.environ['I3_APPROVAL_ID']
+          lines = approval['body'].strip().splitlines()
+          if (approval['user']['login'] != 'toyro396133' or approval['html_url'] != ref
+              or approval['created_at'] != approval['updated_at'] or lines[0] != 'I3_APPLY_AUTHORIZATION_V1'):
+              sys.exit('I3_APPROVAL_READBACK_DENIED')
+          fields = dict(line.split('=', 1) for line in lines[1:])
+          if fields['plan_sha256'] != os.environ['I3_PLAN_SHA'] or fields['code_sha'] != os.environ['I3_CODE_SHA']:
+              sys.exit('I3_APPROVAL_PIN_MISMATCH')
+          (private / 'tenant').write_text(fields['tenant_id'])
+          gate = dict(plan_sha256=fields['plan_sha256'], operator_id=fields['operator_id'],
+                      ref=ref, protected_sha256=fields['protected_sha256'],
+                      recovery_ref=fields['recovery_branch'], reviewed_sha=fields['code_sha'])
+          (private / 'gate.json').write_text(json.dumps(gate))
+          PY
+          if ! python3 scripts/import-v2/prepare_person_identity.py \
+            --cards-file "$source_dir/תורמים.csv" --history-file "$source_dir/שינוייםתורמים.csv" \
+            --tenant-id "$(cat "$private/tenant")" --plan-output "$private/plan.json" \
+            >"$private/plan.log" 2>&1; then
+            echo I3_PRIVATE_PLAN_PREPARATION_FAILED
+            exit 1
+          fi
+          actual=$(head -c -1 "$private/plan.json" | sha256sum | cut -d' ' -f1)
+          if [[ "$actual" != "$I3_PLAN_SHA" ]]; then
+            echo I3_PRIVATE_PLAN_DIGEST_MISMATCH
+            exit 1
+          fi
+          echo I3_PRIVATE_PLAN_DIGEST_VERIFIED
+      - name: Run full native preflight and apply signed transaction
+        working-directory: importer
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          I3_STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
+          I3_SOURCE_EVIDENCE_MAC_KEY: ${{ secrets.I3_SOURCE_EVIDENCE_MAC_KEY }}
+          I3_PREFLIGHT_SIGNATURE_KEY: ${{ secrets.I3_PREFLIGHT_SIGNATURE_KEY }}
+          I3_CODE_ACCEPTED_COMMENT_ID: '6461261466'
+          I3_RECOVERY_PROOF_MODE: NEON_NATIVE_FRESH_V1
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          private="$RUNNER_TEMP/i3-apply-private"
+          export I3_PINNED_CARDS_CSV='apps/active/Tables/נתונים_טבלאות_מקושרות/תורמים.csv'
+          export I3_PINNED_HISTORY_CSV='apps/active/Tables/נתונים_טבלאות_מקושרות/שינוייםתורמים.csv'
+          if ! node --max-old-space-size=4096 scripts/import-v2/i3_apply_preflight.mjs \
+            "$private/plan.json" "$private/gate.json" "$private/sealed.json" \
+            >"$private/preflight.log" 2>&1; then
+            grep -Ex 'I3_APPLY_PREFLIGHT_DENIED: [A-Z][A-Z0-9_]{1,100}' "$private/preflight.log" || echo I3_PREFLIGHT_FAILED_PRIVATE
+            exit 1
+          fi
+          test -s "$private/sealed.json"
+          echo I3_LIVE_NATIVE_PREFLIGHT_AND_CLEANUP_PASSED
+          if ! PYTHONPATH=scripts/import-v2 python3 - "$private" >"$private/writer.log" 2>&1 <<'PY'
+          import json, sys
+          from pathlib import Path
+          from person_writer import apply_sql
+          from prepare_person_identity import private_create
+
+          private = Path(sys.argv[1])
+          plan = json.loads((private / 'plan.json').read_text())
+          gate = json.loads((private / 'sealed.json').read_text())
+          private_create(private / 'apply.sql', apply_sql(plan, gate))
+          PY
+          then
+            grep -Eo '^reference_plan.PlanError: [A-Z][A-Z0-9_]{1,100}$' "$private/writer.log" || echo I3_SQL_GENERATION_FAILED_PRIVATE
+            exit 1
+          fi
+          echo I3_SIGNED_SQL_GENERATED
+          if ! PGCONNECT_TIMEOUT=15 psql -d "$I3_STAGING_DATABASE_URL" -Xqw \
+            -v ON_ERROR_STOP=1 -f "$private/apply.sql" >"$private/apply.log" 2>&1; then
+            grep -Eo 'ERROR: +I3_[A-Z0-9_]+' "$private/apply.log" | head -n 1 || true
+            echo I3_SQL_EXECUTION_FAILED_CHECK_DATABASE_BEFORE_RETRY
+            exit 1
+          fi
+          echo I3_SQL_TRANSACTION_COMMITTED
+      - name: Remove private source and generated files
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/i3-apply-private" "$GITHUB_WORKSPACE/importer"
