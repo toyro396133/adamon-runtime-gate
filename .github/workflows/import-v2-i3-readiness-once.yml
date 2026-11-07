@@ -71,12 +71,24 @@ jobs:
             failed=1
           fi
           if [[ -n "$I3_STAGING_DATABASE_URL" ]]; then
-            result=$(PGDATABASE="$I3_STAGING_DATABASE_URL" PGOPTIONS='-c default_transaction_read_only=on' PGCONNECT_TIMEOUT=10 timeout 20s psql -XqAtw -v ON_ERROR_STOP=1 -c "SELECT coalesce(current_setting('neon.project_id',true)='fragrant-dream-21113210' AND current_setting('neon.branch_id',true)='br-summer-frost-apf4ee36' AND current_setting('transaction_read_only')='on',false)" 2>/dev/null) || result=''
-            if [[ "$result" == t ]]; then
-              echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=PASS'
-            else
-              echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=FAIL'
+            # psql -d explicitly parses the secret as a libpq URI/conninfo string.
+            # PGDATABASE is only a default database name and may not expand a URI.
+            # Never print the secret, psql stderr or the connection hostname.
+            if [[ ! "$I3_STAGING_DATABASE_URL" =~ ^postgres(ql)?:// ]]; then
+              echo 'POSTGRES_SECRET_FORMAT=FAIL_EXPECTED_DIRECT_URI'
               failed=1
+            else
+              if result=$(PGOPTIONS='-c default_transaction_read_only=on' PGCONNECT_TIMEOUT=10 timeout 20s psql -d "$I3_STAGING_DATABASE_URL" -XqAtw -v ON_ERROR_STOP=1 -c "SELECT coalesce(current_setting('neon.project_id',true)='fragrant-dream-21113210' AND current_setting('neon.branch_id',true)='br-summer-frost-apf4ee36' AND current_setting('transaction_read_only')='on',false)" 2>/dev/null); then
+                if [[ "$result" == t ]]; then
+                  echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=PASS'
+                else
+                  echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=FAIL_WRONG_BRANCH_OR_SESSION_MODE'
+                  failed=1
+                fi
+              else
+                echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=FAIL_CONNECT_OR_QUERY'
+                failed=1
+              fi
             fi
           else
             echo 'POSTGRES_READ_ONLY_ISOLATED_TARGET=SKIPPED_MISSING_URL'
