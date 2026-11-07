@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 681a5daaa3480e02835f26ebf4f5756700935bbe
+          ref: 7b2803ee06fb3b7878af7ef268668462cca24b56
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -36,7 +36,7 @@ jobs:
       - name: Pin source SHA and original PR15 neural checkpoint provenance
         shell: bash
         run: |
-          test "$(git -C source rev-parse HEAD)" = "681a5daaa3480e02835f26ebf4f5756700935bbe"
+          test "$(git -C source rev-parse HEAD)" = "7b2803ee06fb3b7878af7ef268668462cca24b56"
           test -s source/concept-discovery-v2/research/neural_units/RESEARCH_PRINCIPLES_HE.md
           test "$(find pr15-checkpoints -name 'root-continued-seed-*.pt' -type f | wc -l)" -eq 2
           find pr15-checkpoints -name 'root-continued-seed-*.pt' -type f -exec sha256sum {} \;
