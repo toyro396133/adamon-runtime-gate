@@ -1,0 +1,84 @@
+name: Concept Lab PR17 cross individual root learning (continued PR16)
+on:
+  push:
+    branches: [ci/concept-cross-entity-transfer-20261108]
+    paths: [.github/workflows/concept-cross-entity-transfer-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  continue-PR16-physical-neural-weights:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - name: Check existing connected read permission without exposing secret
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Missing read token"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: b7fe9cdcb9bdf4ed923a2ba97ea3a4371e6ce03f
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download final PR16 trained checkpoints AND identical 2000 dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: two-thousand-entities-pr15-continuation
+          run-id: 42421371013
+          github-token: '${{ github.token }}'
+          path: predecessor-PR16
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: CPU neural learner + independent posttraining scorer
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Verify immutable source SHA, predecessor dataset and both checkpoints
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "b7fe9cdcb9bdf4ed923a2ba97ea3a4371e6ce03f"
+          test "$(find predecessor-PR16 -type f -name 'roots-2000-seed-*.pt' | wc -l)" -eq 2
+          file=$(find predecessor-PR16 -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -n "$file"
+          dataset=$(dirname "$(dirname "$file")")
+          mkdir -p source/concept-discovery-v2/results/cross
+          cp -a "$dataset" source/concept-discovery-v2/results/cross/dataset
+          test -s source/concept-discovery-v2/results/cross/dataset/corpus/train.jsonl
+          find predecessor-PR16 -type f -name 'roots-2000-seed-*.pt' -exec sha256sum {} \;
+      - name: Focused tests — donor exclusion, direct bank proposals, PR16 data safety
+        working-directory: source/concept-discovery-v2
+        run: python -m unittest tests.test_cross_entity_transfer tests.test_2000_roots -v
+      - name: Freeze independent seeded identities before the new training
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -m research.neural_units.generate_2000_world \
+            --out results/cross/sealed --seed 2026110897
+          sha256sum results/cross/sealed/corpus/test.jsonl \
+            results/cross/sealed/evaluation_only/truth.jsonl
+      - name: REAL continuation of PR16 6-optimizer neural checkpoints on 1330 TRAIN people and objects
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.cross_entity_transfer_study \
+            --dataset results/cross/dataset --predecessors ../../predecessor-PR16 \
+            --output results/cross
+      - name: Evaluate frozen weights / heldout, sealed unseen and lexical shortcuts AFTER all training
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.evaluate_cross_entity_transfer \
+            --dataset results/cross/dataset --sealed results/cross/sealed \
+            --sealed-seed 2026110897 --training results/cross \
+            --predecessors ../../predecessor-PR16
+      - name: Save two final resumed checkpoints, source worlds and all controls
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          path: |
+            source/concept-discovery-v2/results/cross/dataset/**
+            source/concept-discovery-v2/results/cross/sealed/**
+            source/concept-discovery-v2/results/cross/continued-interentity-seed-*.pt
+            source/concept-discovery-v2/results/cross/control-sameview-seed-*.pt
+            source/concept-discovery-v2/results/cross/cross_entity_train_results.json
+            source/concept-discovery-v2/results/cross/cross_entity_posttraining_evaluation.json
+            source/concept-discovery-v2/results/cross/representations/**
+          if-no-files-found: warn
