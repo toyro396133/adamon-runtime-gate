@@ -116,9 +116,9 @@ def forward_delta(model, doc):
         full=model(*xs)[0]
         muted=model(*xs,mute_bootstrap=True)[0]
     return round(float((full-muted).abs().max()),8)
-def ablate_new(model, fn):
+def ablate_new(model, fn, only_slots=None):
     growth,bank=model.growth,model.bootstrap
-    slots=(growth.protected & ~growth.original_slots).nonzero().flatten().tolist()
+    slots=(growth.protected & ~growth.original_slots).nonzero().flatten().tolist() if only_slots is None else only_slots
     before=fn()
     backups=[]
     with torch.no_grad():
@@ -142,6 +142,7 @@ def audit_seed(seed):
     g=model.growth
     input_ckpt=ckpt.exists()
     baseline=copy.deepcopy(model.state_dict())
+    full_pre_protected=g.protected.detach().clone()
     occupied_pre=int(g.occupied.sum());accepted_pre=int(g.accepted)
     base_phrase=phrase_probes(model)
     before_retrieval=summary_metrics(model,probe)
@@ -161,10 +162,11 @@ def audit_seed(seed):
     after_phrase=phrase_probes(model)
     slots=(g.protected & ~g.original_slots).nonzero().flatten().tolist()
     created_after=int(g.accepted)-accepted_pre
+    incremental_slots=(g.protected & ~full_pre_protected).nonzero().flatten().tolist()
     delta=float((learned-before_retrieval).abs().mean())
     probe_fn=lambda:summary_metrics(model,probe)
-    old,muted,restored,nslots=ablate_new(model,probe_fn)
-    # Original V4 learned slots are also ablated; compare exact restored output.
+    old,muted,restored,nslots=ablate_new(model,probe_fn,incremental_slots)
+    # Surgical intervention of ONLY newly accepted PR4 writes, never pilot writes.
     causal=float((old-muted).abs().mean())
     exact=bool(torch.equal(old,restored))
     before_forward=forward_delta(model,world[8])
@@ -176,6 +178,18 @@ def audit_seed(seed):
     no_write.load_state_dict(baseline)
     nowrite_phrases=phrase_probes(no_write)
     no_write_ret=summary_metrics(no_write,probe)
+    # Matched-write-content control: same number of new neurons, identical weight
+    # norms and inputs, but reassign output content across newly created slots.
+    scrambled=copy.deepcopy(model)
+    scramble_difference=None
+    if len(incremental_slots)>1:
+        with torch.no_grad():
+            k=incremental_slots
+            shuffled=k[1:]+k[:1]
+            for target,source in zip(k,shuffled):
+                scrambled.bootstrap.compose.weight[:,target]=model.bootstrap.compose.weight[:,source].clone()
+        scrambled_result=summary_metrics(scrambled,probe)
+        scramble_difference=round(float((scrambled_result-old).abs().mean()),8)
     drift=float((old-no_write_ret).abs().mean())
     protected=g.protected.detach().clone();anchors=g.anchor_enter.detach().clone()
     sess.save()
@@ -193,11 +207,12 @@ def audit_seed(seed):
      "growth_stats":stats,"continued_stats":cont,
      "occupied_before":occupied_pre,"occupied_after":int(g.occupied.sum()),
      "accepted_before":accepted_pre,"new_accepted":created_after,
-     "new_since_world_temporal":int(g.accepted)-temporal_before,
-     "new_slots_sample":slots[-12:],"probe_count":len(probe),
+     "world_temporal_accepted":int(g.accepted)-temporal_before,
+     "new_slots_sample":incremental_slots,"probe_count":len(probe),
+     "matched_content_permutation_abs_delta":scramble_difference,
      "probe_retrieval_delta_vs_no_write":round(drift,8),
      "probe_retrieval_delta_vs_initial":round(delta,8),
-     "ablation_mean_abs":round(causal,8),"ablation_restore_exact":exact,
+     "incremental_pr4_ablation_mean_abs":round(causal,8),"incremental_pr4_ablation_restore_exact":exact,
      "checkpoint_exact":state_equal,"protected_anchors_unchanged_after_continuation":retained,
      "full_forward_bootstrap_delta_at_stored_gain_before":before_forward0,
      "full_forward_bootstrap_delta_at_stored_gain_after":before_forward,
