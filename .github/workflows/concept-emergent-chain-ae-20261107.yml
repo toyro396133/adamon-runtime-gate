@@ -1,0 +1,64 @@
+name: Concept lab A-E emergent evidence continuation
+on:
+  push:
+    branches: [ci/concept-emergent-chain-ae-20261107]
+    paths: [.github/workflows/concept-emergent-chain-ae-20261107.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  continue-pr11:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Require existing read-only model access
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        shell: bash
+        run: 'test -n "$TOKEN" || { echo "::error::Missing RECURSIVE_CONCEPTS_READ_TOKEN"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 44b03db49b88bd706ee56d0a29dd869b14ef1e63
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f991e4f201364294af866b0add51793e9a7a57bc
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: data
+      - name: Retrieve exact last PR11 checkpoints
+        uses: actions/download-artifact@v4
+        with:
+          name: w1-w4-world-neural-checkpoints-and-metrics
+          run-id: 42408721030
+          github-token: '${{ github.token }}'
+          path: pr11-checkpoints
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify frozen code, data and two original checkpoint files
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "44b03db49b88bd706ee56d0a29dd869b14ef1e63"
+          test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
+          test "$(find pr11-checkpoints -name 'world-seed-*.pt' -type f | wc -l)" -eq 2
+          find pr11-checkpoints -type f -name 'world-seed-*.pt' -exec sha256sum {} \;
+      - name: Focused existing and new neural invariants
+        working-directory: source/concept-discovery-v2
+        run: python -m unittest tests.test_world_representations tests.test_structural_growth tests.test_emergent_chain -v
+      - name: Train, test and correct on exact previously learned neural weights
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -m research.neural_units.emergent_chain_study \
+            --data-root ../../data --checkpoint-root ../../pr11-checkpoints \
+            --out results/emergent-chain-ae --steps 24 --seeds 7 17
+      - name: Publish numeric metrics and resumed neural checkpoints
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emergent-ae-resumed-pr11-checkpoints-and-metrics
+          path: |
+            source/concept-discovery-v2/results/emergent-chain-ae/emergent-chain.json
+            source/concept-discovery-v2/results/emergent-chain-ae/continued-seed-*.pt
+          if-no-files-found: warn
