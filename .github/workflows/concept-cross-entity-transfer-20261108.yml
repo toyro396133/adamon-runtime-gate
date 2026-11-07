@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: b7fe9cdcb9bdf4ed923a2ba97ea3a4371e6ce03f
+          ref: 4803db5b0211c18c333199eef28f21c70e2926d4
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -36,7 +36,7 @@ jobs:
       - name: Verify immutable source SHA, predecessor dataset and both checkpoints
         shell: bash
         run: |
-          test "$(git -C source rev-parse HEAD)" = "b7fe9cdcb9bdf4ed923a2ba97ea3a4371e6ce03f"
+          test "$(git -C source rev-parse HEAD)" = "4803db5b0211c18c333199eef28f21c70e2926d4"
           test "$(find predecessor-PR16 -type f -name 'roots-2000-seed-*.pt' | wc -l)" -eq 2
           file=$(find predecessor-PR16 -type f -path '*/dataset/corpus/train.jsonl' | head -1)
           test -n "$file"
