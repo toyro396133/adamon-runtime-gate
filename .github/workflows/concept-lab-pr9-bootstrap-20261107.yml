@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 4d97490d3f1114c7e3e333500f592da8e17494d4
+          ref: a2c84364a8eba4155b912548ba70a8c43abcc5b6
           path: source
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
@@ -41,7 +41,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = "4d97490d3f1114c7e3e333500f592da8e17494d4"
+          test "$(git rev-parse HEAD)" = "a2c84364a8eba4155b912548ba70a8c43abcc5b6"
           python -m unittest tests.test_weight_bootstrap -v
       - name: Record capacity and exact programmed coefficients
         working-directory: source/concept-discovery-v2
@@ -54,10 +54,10 @@ jobs:
           net=ConceptSystem()
           bank=net.bootstrap
           report={
-            "code_sha":"4d97490d3f1114c7e3e333500f592da8e17494d4",
+            "code_sha":"a2c84364a8eba4155b912548ba70a8c43abcc5b6",
             "base_units": net.config.circuits * net.config.units,
             "bootstrap_bank_units": bank.circuits * bank.units,
-            "new_programmed_neurons":4*bank.features,
+            "new_programmed_neurons":5*bank.features,
             "total_parameters":sum(p.numel() for p in net.parameters()),
             "bootstrap_gain_at_legacy_load":float(net.bootstrap_gain),
             "compare_positive_coefficient":float(bank.enter.weight[bank.index(0,0),0]),
