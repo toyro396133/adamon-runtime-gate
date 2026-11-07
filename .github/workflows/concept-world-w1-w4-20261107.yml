@@ -1,0 +1,80 @@
+name: Recursive Concepts W1-W4 frozen world study
+on:
+  push:
+    branches: [ci/concept-world-w1-w4-20261107]
+    paths: [.github/workflows/concept-world-w1-w4-20261107.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: concept-world-w1-w4
+  cancel-in-progress: false
+jobs:
+  world-study:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Require read-only Concept Lab token
+        env:
+          TOKEN: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+        shell: bash
+        run: |
+          test -n "$TOKEN" || { echo "::error::Missing RECURSIVE_CONCEPTS_READ_TOKEN"; exit 1; }
+      - name: Checkout exactly pinned world representation source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: a87a99971ef3b4970635c2b3166411d57feb5580
+          token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+          persist-credentials: false
+          path: source
+      - name: Checkout read-only PR4 source text only
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f991e4f201364294af866b0add51793e9a7a57bc
+          token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+          persist-credentials: false
+          path: data
+      - name: Retrieve preserved PR10 checkpoints
+        uses: actions/download-artifact@v4
+        with:
+          name: concept-lab-structural-growth-pilot
+          run-id: 42402717065
+          github-token: ${{ github.token }}
+          path: checkpoints
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify frozen SHAs and PR10 checkpoints
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "a87a99971ef3b4970635c2b3166411d57feb5580"
+          test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
+          find checkpoints -type f -name 'seed-*.pt' -print
+          test "$(find checkpoints -type f -name 'seed-*.pt' | wc -l)" -ge 2
+      - name: Focused engineering and safety regressions
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          python -m unittest tests.test_world_representations -v
+      - name: W1-W4 frozen train-only pilot and contrasts
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          python -m research.neural_units.world_representation_study \
+            --data-root ../../data --checkpoint-root ../../checkpoints \
+            --output results/world-representation-w1-w4 \
+            --seeds 7 17 --pretrain-windows 32
+      - name: Upload numeric evidence plus exact resumable model states
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: w1-w4-world-neural-checkpoints-and-metrics
+          path: |
+            source/concept-discovery-v2/results/world-representation-w1-w4/world-representation-metrics.json
+            source/concept-discovery-v2/results/world-representation-w1-w4/world-seed-*.pt
+          if-no-files-found: warn
