@@ -1,0 +1,105 @@
+name: I3 plan binding diagnostic
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/import-v2-i3-plan-binding-diagnostic.yml]
+permissions:
+  contents: read
+concurrency:
+  group: i3-isolated-data-apply
+  cancel-in-progress: false
+jobs:
+  plan-binding:
+    if: github.repository == 'toyro396133/adamon-runtime-gate' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      I3_CODE_SHA: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+      I3_PLAN_SHA: 51da6bf659949cc327755f4c9edfec995d88417a2f9a21a4b55d0c8e7ffe27a8
+      I3_APPROVAL_ID: '6710784520'
+    steps:
+      - name: Checkout exact approved private code and pinned source files
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: importer
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Install locked importer dependencies
+        working-directory: importer
+        run: |
+          if ! pnpm install --frozen-lockfile >/dev/null 2>&1; then
+            echo I3_DEPENDENCY_INSTALL_FAILED
+            exit 1
+          fi
+      - name: Compare approved and database-bound plans without a database connection
+        working-directory: importer
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          private="$RUNNER_TEMP/i3-apply-private"
+          mkdir -m 700 "$private"
+          test "$(git rev-parse HEAD)" = "$I3_CODE_SHA"
+          source_dir='apps/active/Tables/נתונים_טבלאות_מקושרות'
+          test "$(git rev-parse "HEAD:$source_dir/תורמים.csv")" = '561957d7da5da2814e87af7af175edb7668f2441'
+          test "$(git rev-parse "HEAD:$source_dir/שינוייםתורמים.csv")" = '80f36b9ec52c0f0a76cf66f188cf4659880e561e'
+          curl --silent --fail --max-time 20 -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/toyro396133/chacham-lev/issues/comments/$I3_APPROVAL_ID" \
+            >"$private/approval.json"
+          python3 - "$private" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+
+          private = Path(sys.argv[1])
+          approval = json.loads((private / 'approval.json').read_text())
+          ref = 'https://github.com/toyro396133/chacham-lev/issues/196#issuecomment-' + os.environ['I3_APPROVAL_ID']
+          lines = approval['body'].strip().splitlines()
+          if (approval['user']['login'] != 'toyro396133' or approval['html_url'] != ref
+              or approval['created_at'] != approval['updated_at'] or lines[0] != 'I3_APPLY_AUTHORIZATION_V1'):
+              sys.exit('I3_APPROVAL_READBACK_DENIED')
+          fields = dict(line.split('=', 1) for line in lines[1:])
+          if fields['plan_sha256'] != os.environ['I3_PLAN_SHA'] or fields['code_sha'] != os.environ['I3_CODE_SHA']:
+              sys.exit('I3_APPROVAL_PIN_MISMATCH')
+          (private / 'tenant').write_text(fields['tenant_id'])
+          gate = dict(plan_sha256=fields['plan_sha256'], operator_id=fields['operator_id'],
+                      ref=ref, protected_sha256=fields['protected_sha256'],
+                      recovery_ref=fields['recovery_branch'], reviewed_sha=fields['code_sha'])
+          (private / 'gate.json').write_text(json.dumps(gate))
+          PY
+          if ! PYTHONPATH=scripts/import-v2 python3 - "$private" "$source_dir" >"$private/diagnostic.log" 2>&1 <<'PY'
+          import gc, os, sys
+          from pathlib import Path
+          from person_intake import from_source_bytes
+          from person_plan import digest
+
+          private = Path(sys.argv[1])
+          source = Path(sys.argv[2])
+          tenant = (private / 'tenant').read_text()
+          cards = (source / 'תורמים.csv').read_bytes()
+          history = (source / 'שינוייםתורמים.csv').read_bytes()
+          for label, tenant_input in (('DATABASE_ID', tenant), ('LEGACY_ID_WITH_TRAILING_LF', tenant + '\n')):
+              plan = from_source_bytes(cards, history, tenant_input)
+              print(f'{label}_PLAN_SHA256={digest(plan)}')
+              print(f'{label}_COUNTS={len(plan["entries"])},{len(plan["quarantine"])},{len(plan["history_rows"])}')
+              del plan
+              gc.collect()
+          PY
+          then
+            echo I3_PLAN_DIAGNOSTIC_FAILED_PRIVATE
+            exit 1
+          fi
+          grep -Ex '(DATABASE_ID|LEGACY_ID_WITH_TRAILING_LF)_(PLAN_SHA256=[0-9a-f]{64}|COUNTS=[0-9]+,[0-9]+,[0-9]+)' "$private/diagnostic.log"
+      - name: Remove private source and generated files
+        if: always()
+        shell: bash
+        run: rm -rf -- "$RUNNER_TEMP/i3-apply-private" "$GITHUB_WORKSPACE/importer"
