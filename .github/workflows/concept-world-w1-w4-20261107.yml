@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: f5b30f9475dd0a020c7f3711c9eca9c0f6008bf3
+          ref: d964cf21818fe8d00ff07b333caf6c8ea73a6774
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -52,7 +52,7 @@ jobs:
       - name: Verify frozen SHAs and PR10 checkpoints
         shell: bash
         run: |
-          test "$(git -C source rev-parse HEAD)" = "f5b30f9475dd0a020c7f3711c9eca9c0f6008bf3"
+          test "$(git -C source rev-parse HEAD)" = "d964cf21818fe8d00ff07b333caf6c8ea73a6774"
           test "$(git -C data rev-parse HEAD)" = "f991e4f201364294af866b0add51793e9a7a57bc"
           find checkpoints -type f -name 'seed-*.pt' -print
           test "$(find checkpoints -type f -name 'seed-*.pt' | wc -l)" -ge 2
