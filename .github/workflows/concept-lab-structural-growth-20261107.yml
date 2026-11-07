@@ -1,0 +1,33 @@
+name: Concept Lab structural growth isolated acceptance
+on:
+  push:
+    branches: [ci/concept-lab-structural-growth-20261107]
+    paths: [.github/workflows/concept-lab-structural-growth-20261107.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  structural-growth:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Require read-only repo access
+        env: {READ_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        shell: bash
+        run: 'test -n "$READ_TOKEN" || { echo "::error::Missing RECURSIVE_CONCEPTS_READ_TOKEN"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: f46f6b774c2e7b6eea88c82efefe4c432807c791
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Frozen SHA and scoped neural growth regressions
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = f46f6b774c2e7b6eea88c82efefe4c432807c791
+          python -m unittest tests.test_weight_bootstrap tests.test_structural_growth -v
