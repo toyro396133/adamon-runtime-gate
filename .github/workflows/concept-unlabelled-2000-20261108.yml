@@ -1,0 +1,72 @@
+name: Concept Lab 2000 unlabelled entities root discovery
+on:
+  push:
+    branches: [ci/concept-unlabelled-2000-20261108]
+    paths: [.github/workflows/concept-unlabelled-2000-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  real-pr15-continuation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    steps:
+      - name: Validate existing read-only access token
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Missing RECURSIVE_CONCEPTS_READ_TOKEN"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 681a5daaa3480e02835f26ebf4f5756700935bbe
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download only post-training FINAL PR15 checkpoints
+        uses: actions/download-artifact@v4
+        with:
+          name: three-memory-root-pr13-continuation
+          run-id: 42418061450
+          github-token: '${{ github.token }}'
+          path: pr15-checkpoints
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU PyTorch plus only evaluation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Pin source SHA and original PR15 neural checkpoint provenance
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "681a5daaa3480e02835f26ebf4f5756700935bbe"
+          test -s source/concept-discovery-v2/research/neural_units/RESEARCH_PRINCIPLES_HE.md
+          test "$(find pr15-checkpoints -name 'root-continued-seed-*.pt' -type f | wc -l)" -eq 2
+          find pr15-checkpoints -name 'root-continued-seed-*.pt' -type f -exec sha256sum {} \;
+      - name: Minimal focused dataset, root and checkpoint safety tests
+        working-directory: source/concept-discovery-v2
+        run: python -m unittest tests.test_2000_roots tests.test_memory_hierarchy -v
+      - name: W1-W2 generate full 2000 individuals and segregated unseen taxonomy
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -m research.neural_units.generate_2000_world --out results/2000/dataset
+      - name: W3-W8 ACTUAL three-stage continuation, neural writes and ablations
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.train_2000_roots \
+            --data-root results/2000/dataset --checkpoints ../../pr15-checkpoints \
+            --output results/2000 --seeds 7 17
+      - name: W5/W8 read locked truth ONLY AFTER finished training and checkpoints
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.evaluate_2000_roots \
+            --dataset results/2000/dataset --training results/2000
+      - name: Publish generated corpus, segregated truth, real checkpoints and metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: two-thousand-entities-pr15-continuation
+          path: |
+            source/concept-discovery-v2/results/2000/dataset/**
+            source/concept-discovery-v2/results/2000/training_results.json
+            source/concept-discovery-v2/results/2000/posttraining_evaluation.json
+            source/concept-discovery-v2/results/2000/roots-2000-seed-*.pt
+            source/concept-discovery-v2/results/2000/representations/**
+          if-no-files-found: warn
