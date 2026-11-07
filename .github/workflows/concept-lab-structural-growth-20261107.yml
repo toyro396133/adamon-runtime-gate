@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 60323c129732e62e3d936420a625746ed69e7a95
+          ref: c252d904f05f9ed1ded6b5240ad3034a740b7047
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           path: source
           persist-credentials: false
@@ -29,7 +29,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         shell: bash
         run: |
-          test "$(git rev-parse HEAD)" = 60323c129732e62e3d936420a625746ed69e7a95
+          test "$(git rev-parse HEAD)" = c252d904f05f9ed1ded6b5240ad3034a740b7047
           python -m unittest tests.test_weight_bootstrap tests.test_structural_growth -v
       - name: Learned versus controls on held-out Hebrew text
         working-directory: source/concept-discovery-v2
