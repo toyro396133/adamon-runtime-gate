@@ -126,7 +126,7 @@ jobs:
               !!req.postData()?.includes('ללא טלפון'), { timeout: 20000 });
             await field.fill('ללא טלפון');
             const issued = await pending;
-            await expect(page.getByText(/תורם ללא טלפון/)).toBeVisible({ timeout: 20000 });
+            await expect(page.getByRole('button', { name: 'תורם ללא טלפון (לא ידוע)' })).toBeVisible({ timeout: 20000 });
             const rawBody = issued.postData() || '';
             const params = JSON.parse(rawBody);
             expect(Array.isArray(params)).toBe(true);
