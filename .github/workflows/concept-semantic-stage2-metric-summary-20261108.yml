@@ -1,0 +1,49 @@
+name: Concept Lab stage2 final artifact audit and metric summary
+on:
+  push:
+    branches: [ci/concept-semantic-gru-stage2-20261108]
+    paths: [.github/workflows/concept-semantic-stage2-metric-summary-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  summarize:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2-semantic-gru-A0-A1-B-seed7-17
+          run-id: 42439826561
+          github-token: '${{ github.token }}'
+          path: stage2
+      - name: Verify summaries, original bank and optimizer continuity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("stage2")
+          t=json.loads(next(p.rglob("training.json")).read_text())
+          e=json.loads(next(p.rglob("independent_evaluation.json")).read_text())
+          print("=== FINAL RUN TRAIN METADATA ===")
+          print(json.dumps({"data":t["data"],"teacher":t["teacher_audit"],"teacher_signal_active":t["teacher_signal_active"]},ensure_ascii=False))
+          for seed in (7,17):
+            for arm in ("A0","A1","B"):
+              k=f"{arm}_seed{seed}";v=t["results"][k]
+              selected=next((h for h in v["milestone_history"] if h["step"]==v["selected_step"]),None)
+              print("TRAIN",json.dumps({"key":k,"accepted":v["accepted"],"rolled_back":v["rolled_back"],"step":v["selected_step"],"balanced_before":v["word_multiset_balanced_train_before"],"selected":selected,"last_attempt":v["milestone_history"][-1] if v["milestone_history"] else None,"historical_before":v["historical_before"],"physical":v["physical_units"],"experiences":v["experience_records"],"optimizers":v["all_six_optimizer_states_reloaded"],"frozen":v["frozen_modules_bitwise_intact"],"checkpoint_sha256":v["checkpoint_sha256"]},ensure_ascii=False))
+          print("=== FINAL RUN HELD-OUT METRICS ===")
+          for split in ("test","holdout"):
+            for analyzer in ("word","char"):
+              x=e["baseline_lexical"][split][analyzer+"_balanced_tfidf"]
+              print("LEXICAL",json.dumps({"split":split,"analyzer":analyzer,"balanced_cosine":x["cosine"]["all"],"balanced_supervised":x["small_supervised"]["all"]},ensure_ascii=False))
+            for seed in (7,17):
+              for arm in ("A0","A1","B"):
+                k=f"{arm}_seed{seed}";x=e["models"][k][split]
+                summary={"key":k,"split":split}
+                for name in ("gru_native_cosine","gru_frozen_linear_decoder","actual_infer_local_cosine","local_frozen_linear_decoder"):
+                  summary[name+"_overall"]=x[name]["all"]["accuracy"]
+                  summary[name+"_balanced"]=x["exact_word_multiset_balanced"][name]["all"]["accuracy"]
+                print("RESULT",json.dumps(summary,ensure_ascii=False))
+          print("EVIDENCE_JSON_SHA_PATHS",str(next(p.rglob("training.json"))),str(next(p.rglob("independent_evaluation.json"))))
+          PY
