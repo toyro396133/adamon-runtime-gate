@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 4fd7d33cb7d8e2b222a1803567aa44134def716f
+          ref: dfef3336b14034f1d979281095b20180c695e638
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -41,7 +41,7 @@ jobs:
       - name: Three focused checks
         working-directory: source/concept-discovery-v2
         run: |
-          test "$(git rev-parse HEAD)" = "4fd7d33cb7d8e2b222a1803567aa44134def716f"
+          test "$(git rev-parse HEAD)" = "dfef3336b14034f1d979281095b20180c695e638"
           python -m unittest tests.test_cross_entity_structure -v
       - name: Generate 2600 novel entities and isolated textual templates
         working-directory: source/concept-discovery-v2
@@ -55,8 +55,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          original_train=$(find ../../pr18-frozen -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$original_train"
           python -u -m research.neural_units.train_cross_entity_structure \
             --checkpoints ../../pr20-frozen --world ../../world-2600 \
+            --legacy-train "$original_train" \
             --output results/cross-entity-2600 --steps 80
           test "$(find results/cross-entity-2600 -name 'continued-shared-structure-seed-*.pt' | wc -l)" -eq 2
       - name: Blind post-checkpoint evaluation against PR18, PR20 and reversible lesions
