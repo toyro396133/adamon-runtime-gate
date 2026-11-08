@@ -7,7 +7,7 @@ permissions: {}
 jobs:
   verification:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:16
@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 6c435e2e2716b4f1692cc28215918db0a326bcb2
+          ref: 974d358d257d1feb2c3dae761948925eaa2e05c2
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -32,13 +32,21 @@ jobs:
             scripts/import-v2/audit_source.py
             src
             prisma/schema.prisma
+            package.json
+            next.config.ts
+            tsconfig.json
+            tailwind.config.js
+            postcss.config.mjs
+            playwright.config.ts
+            e2e/import-v2-i56.spec.ts
+            public
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "6c435e2e2716b4f1692cc28215918db0a326bcb2"
+          test "$(git rev-parse HEAD)" = "974d358d257d1feb2c3dae761948925eaa2e05c2"
           python3 -m unittest discover -s scripts/restore-5786 -v
           node --test scripts/restore-5786/neon_preflight.test.mjs
       - name: Install pinned verification dependencies
@@ -107,7 +115,7 @@ jobs:
       - name: Rehearse all 3,124 synthetic candidates and restore a recovery database
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
-          I56_EXACT_SHA: 6c435e2e2716b4f1692cc28215918db0a326bcb2
+          I56_EXACT_SHA: 974d358d257d1feb2c3dae761948925eaa2e05c2
           I56_SYNTHETIC_DEBUG: '1'
           I56_POSTGRES_SERVICE: ${{ job.services.postgres.id }}
           I56_FULL_REHEARSAL: '1'
@@ -116,3 +124,58 @@ jobs:
           ./node_modules/.bin/prisma db push --schema prisma/schema.prisma --skip-generate
           python3 scripts/restore-5786/full_rehearsal.py
           ./node_modules/.bin/vitest run --config .i56-vitest.config.mjs src/actions/historicalCampaignEvents.i56.integration.test.ts
+      - name: Install application dependencies and Chromium for authenticated E2E
+        run: |
+          unlink node_modules
+          npm install --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit --no-fund @playwright/test@1.55.0
+          ./node_modules/.bin/prisma generate --schema prisma/schema.prisma
+          ./node_modules/.bin/playwright install chromium
+      - name: Verify the archive with real credentials and Chromium
+        env:
+          DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
+          NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+          NEXT_TELEMETRY_DISABLED: '1'
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: |
+          export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
+          export AUTH_SECRET="$NEXTAUTH_SECRET"
+          export E2E_TEST_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$NEXTAUTH_SECRET"
+          echo "::add-mask::$E2E_TEST_PASSWORD"
+          node --input-type=module <<'EOF'
+          import { PrismaClient } from '@prisma/client';
+          import bcrypt from 'bcryptjs';
+          const prisma = new PrismaClient();
+          const password = await bcrypt.hash(process.env.E2E_TEST_PASSWORD, 10);
+          const tenantId = 'i56-full-synthetic';
+          const foreignId = 'i56-browser-foreign';
+          await prisma.tenant.update({where:{id:tenantId},data:{status:'Active'}});
+          await prisma.tenant.create({data:{id:foreignId,name:'Foreign Synthetic',subdomain:foreignId,status:'Active'}});
+          await prisma.user.createMany({data:[
+            {phone:'052-1234561',role:'ADMIN',tenantId},
+            {phone:'052-1234562',role:'STAFF',tenantId},
+            {phone:'052-1234563',role:'ADMIN',tenantId:foreignId},
+          ].map((fields,i)=>({name:'Synthetic Test',email:'i56-browser-'+i+'@example.invalid',
+            password,isActive:true,...fields}))});
+          const campaign = await prisma.campaign.findFirstOrThrow({where:{tenantId}});
+          await prisma.person.create({data:{id:'i56-browser-foreign-person',tenantId:foreignId,
+            firstName:'Synthetic',lastName:'Foreign',type:'DONOR'}});
+          await prisma.auditLog.create({data:{tenantId,model:'I56HistoricalEvent',recordId:campaign.id,
+            action:'IMPORT_V2_I56_CANONICAL_REHEARSAL',changes:JSON.stringify({
+              person:'i56-browser-foreign-person',kind:'WINDOW_PARTICIPATION',
+              disposition:'VERIFIED',phase:'EXECUTION',year:'5786',occurred_at:'2026-01-01T01:00:00',
+              window:'i56-foreign-address-should-never-render',
+            })}});
+          await prisma.$disconnect();
+          EOF
+          ./node_modules/.bin/next dev -H 127.0.0.1 -p 3000 > "$RUNNER_TEMP/i56-next.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --max-time 20 http://127.0.0.1:3000/login > /dev/null; then break; fi
+            kill -0 "$server" || { tail -60 "$RUNNER_TEMP/i56-next.log"; exit 1; }
+            sleep 2
+          done
+          ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --retries=0 --reporter=line || {
+            tail -80 "$RUNNER_TEMP/i56-next.log"; exit 1;
+          }
