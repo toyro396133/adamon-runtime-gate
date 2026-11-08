@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 4cbdc7e30f829dabd269fb315a478255326ad582
+          ref: 8a46c43814e5b860fb6ab9a15b661b7bccfb292f
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -48,7 +48,7 @@ jobs:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "4cbdc7e30f829dabd269fb315a478255326ad582"
+          test "$(git rev-parse HEAD)" = "8a46c43814e5b860fb6ab9a15b661b7bccfb292f"
           python3 -m unittest discover -s scripts/restore-5786 -v
           node --test scripts/restore-5786/neon_preflight.test.mjs
       - name: Install pinned verification dependencies
@@ -117,7 +117,7 @@ jobs:
       - name: Rehearse all 3,124 synthetic candidates and restore a recovery database
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
-          I56_EXACT_SHA: 4cbdc7e30f829dabd269fb315a478255326ad582
+          I56_EXACT_SHA: 8a46c43814e5b860fb6ab9a15b661b7bccfb292f
           I56_SYNTHETIC_DEBUG: '1'
           I56_POSTGRES_SERVICE: ${{ job.services.postgres.id }}
           I56_FULL_REHEARSAL: '1'
@@ -214,7 +214,7 @@ jobs:
             {phone:'052-1234563',role:'ADMIN',tenantId:foreignId},
           ].map((fields,i)=>({name:'Synthetic Test',email:'i56-browser-'+i+'@example.invalid',
             password,isActive:true,...fields}))});
-          const campaign = await prisma.campaign.findFirstOrThrow({where:{tenantId}});
+          const campaign = await prisma.campaign.findFirstOrThrow({where:{tenantId,kind:'LEGACY_IMPORT'}});
           await prisma.person.create({data:{id:'i56-browser-foreign-person',tenantId:foreignId,
             firstName:'Synthetic',lastName:'Foreign',type:'DONOR'}});
           await prisma.auditLog.create({data:{tenantId,model:'I56HistoricalEvent',recordId:campaign.id,
