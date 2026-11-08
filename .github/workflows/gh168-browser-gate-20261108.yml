@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 42
     env:
-      EXPECTED_SHA: 3e704722978aa86a012eb9673ca297d2a97fa202
+      EXPECTED_SHA: 2315bda507f802faf5890ec1d9ad26b81030679f
       DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_main_e2e
       NEXT_TELEMETRY_DISABLED: 1
       NODE_OPTIONS: --max-old-space-size=4096
@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 3e704722978aa86a012eb9673ca297d2a97fa202
+          ref: 2315bda507f802faf5890ec1d9ad26b81030679f
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
