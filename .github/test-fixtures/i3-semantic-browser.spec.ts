@@ -54,8 +54,15 @@ test('authenticated collector cannot assert an institutional fact; no silent aut
   await dialog.getByLabel('מקור ואסמכתה').fill('SYNTHETIC-UNTRUSTED');
   await dialog.getByLabel('נימוק ואימות עדכניות').fill('Testing write rejection only');
   await dialog.getByRole('button',{name:'שמור הכרעה ידנית'}).click();
-  await expect(dialog.getByRole('alert')).toContainText('Forbidden',{timeout:20000});
+  // Next.js production Server Actions deliberately redact the exact server-side
+  // Forbidden reason; the UI must show a safe error without source disclosure.
+  await expect(dialog.getByRole('alert')).toBeVisible({timeout:20000});
+  await expect(dialog.getByRole('alert')).not.toContainText('SYNTHETIC-UNTRUSTED');
   await expect(dialog.getByText('אין שיוכים שנקבעו ידנית.')).toBeVisible();
+  await page.reload();
+  const after=await openPerson(page,'תורם בדיקה');
+  await after.getByRole('button',{name:'השתתפות וזיקות'}).click();
+  await expect(after.getByText('אין שיוכים שנקבעו ידנית.')).toBeVisible();
 });
 
 test('foreign tenant logged-in collector cannot see first tenant person, even after reload',async({page})=>{
