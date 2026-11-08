@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
-      ACCEPTED_SHA: 7d5d859ee76efc316cd340df7676b669f92abe49
+      ACCEPTED_SHA: 988e49fb5349fa93e7c2607c4dab285833712515
       DATABASE_URL: postgresql://none:none@127.0.0.1:5432/never_connected
       NEXTAUTH_SECRET: isolated-runner-only
       AUTH_SECRET: isolated-runner-only
@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 7d5d859ee76efc316cd340df7676b669f92abe49
+          ref: 988e49fb5349fa93e7c2607c4dab285833712515
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
