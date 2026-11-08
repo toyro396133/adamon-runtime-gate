@@ -137,17 +137,62 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Require isolated read-only PostgreSQL role credentials
+      - name: Provision short-lived read-only roles ONLY on the two disposable branches
+        id: provision
         shell: bash
         run: |
           set -euo pipefail
-          for key in I56_TARGET_ROLE I56_TARGET_PASSWORD I56_RECOVERY_ROLE I56_RECOVERY_PASSWORD; do
-            if [[ -z "${!key}" ]]; then
-              echo "BLOCKED_SECRET_MISSING_$key"
-              exit 6
-            fi
+          umask 077
+          work="$RUNNER_TEMP/i56-private"
+          manifest="$work/manifest.json"
+          role="i56_preflight_reader"
+          backup="$(jq -er '.backup' "$manifest")"
+          for kind in target recovery; do
+            branch_id="$(jq -er ".$kind" "$manifest")"
+            branch_meta="$work/$kind-branch-metadata.json"
+            curl --silent --show-error --fail \
+              -H "Authorization: Bearer $I56_NEON_API_KEY" \
+              "https://console.neon.tech/api/v2/projects/$NEON_PROJECT/branches/$branch_id" \
+              -o "$branch_meta" ||
+              { echo 'BLOCKED_DISPOSABLE_BRANCH_METADATA'; exit 8; }
+            jq -e --arg id "$branch_id" --arg parent "$backup" \
+              --arg lsn "$(jq -er .backupLsn "$manifest")" \
+              '.branch | .id==$id and .parent_id==$parent and .parent_lsn==$lsn and .protected==false and .current_state=="ready"' \
+              "$branch_meta" > /dev/null ||
+              { echo 'BLOCKED_DISPOSABLE_BRANCH_PROVENANCE'; exit 8; }
+            curl --silent --show-error --fail --get \
+              -H "Authorization: Bearer $I56_NEON_API_KEY" \
+              --data-urlencode "branch_id=$branch_id" \
+              --data-urlencode 'database_name=neondb' \
+              --data-urlencode 'role_name=neondb_owner' \
+              "https://console.neon.tech/api/v2/projects/$NEON_PROJECT/connection_uri" \
+              -o "$work/$kind-owner-connection.json" ||
+              { echo 'BLOCKED_PRIVATE_BRANCH_ROLE_SETUP'; exit 8; }
+            uri="$(jq -er .uri "$work/$kind-owner-connection.json")"
+            echo "::add-mask::$uri"
+            identity="$(PGOPTIONS='-c default_transaction_read_only=on' \
+              psql -d "$uri" -XqAtw -v ON_ERROR_STOP=1 \
+              -c "SELECT concat_ws('|',current_setting('neon.project_id',true),current_setting('neon.branch_id',true))" 2>/dev/null)" ||
+              { echo 'BLOCKED_DISPOSABLE_BRANCH_DB_IDENTITY'; exit 8; }
+            [[ "$identity" == "$NEON_PROJECT|$branch_id" ]] ||
+              { echo 'BLOCKED_DISPOSABLE_BRANCH_WRONG_IDENTITY'; exit 8; }
+            pw="$(openssl rand -hex 24)"
+            echo "::add-mask::$pw"
+            cat > "$work/readonly-role.sql" <<'SQL'
+          SELECT format('CREATE ROLE %I NOINHERIT LOGIN', :'role')
+            WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname=:'role') \gexec
+          SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'role', :'pw') \gexec
+          SELECT format('GRANT CONNECT ON DATABASE neondb TO %I', :'role') \gexec
+          SELECT format('GRANT USAGE ON SCHEMA public, import_v2 TO %I', :'role') \gexec
+          SELECT format('GRANT SELECT ON ALL TABLES IN SCHEMA public, import_v2 TO %I', :'role') \gexec
+          SQL
+            psql -d "$uri" -XqAtw -v ON_ERROR_STOP=1 -v role="$role" -v pw="$pw" \
+              -f "$work/readonly-role.sql" > /dev/null 2>&1 ||
+              { echo "BLOCKED_${kind^^}_READ_ONLY_ROLE_CREATION"; exit 8; }
+            echo "I56_${kind^^}_ROLE=$role" >> "$GITHUB_ENV"
+            echo "I56_${kind^^}_PASSWORD=$pw" >> "$GITHUB_ENV"
           done
-          echo 'READ_ONLY_CREDENTIALS_PRESENT'
+          echo 'TEMPORARY_READ_ONLY_ROLES_CREATED_ON_DISPOSABLE_BRANCHES'
       - name: Install isolated PostgreSQL Node client
         shell: bash
         run: |
@@ -167,6 +212,25 @@ jobs:
             "$work/manifest.json" \
             'apps/active' \
             "$work/plan.json"
+      - name: Disable temporary read-only role logins after preflight
+        if: always() && steps.provision.outcome != 'skipped'
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/i56-private"
+          for kind in target recovery; do
+            if [[ ! -f "$work/$kind-owner-connection.json" ]]; then continue; fi
+            uri="$(jq -er .uri "$work/$kind-owner-connection.json")"
+            echo "::add-mask::$uri"
+            cat > "$work/disable-role.sql" <<'SQL'
+          SELECT format('ALTER ROLE %I NOLOGIN', :'role')
+            WHERE EXISTS (SELECT 1 FROM pg_roles WHERE rolname=:'role') \gexec
+          SQL
+            psql -d "$uri" -XqAtw -v ON_ERROR_STOP=1 \
+              -v role=i56_preflight_reader -f "$work/disable-role.sql" > /dev/null 2>&1 ||
+              { echo "I56_${kind^^}_ROLE_DISABLE_FAILED"; exit 9; }
+          done
+          echo 'TEMPORARY_READ_ONLY_ROLES_DISABLED'
       - name: Public-safe result summary
         if: success()
         run: echo 'I56_NEON_READ_ONLY_PREFLIGHT_VERIFIED' >> "$GITHUB_STEP_SUMMARY"
