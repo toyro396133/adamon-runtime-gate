@@ -87,10 +87,11 @@ jobs:
       - name: Generate distinct ephemeral session and source evidence secrets
         shell: bash
         run: |
-          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "I3_SOURCE_EVIDENCE_MAC_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          for name in AUTH_SECRET NEXTAUTH_SECRET I3_SOURCE_EVIDENCE_MAC_KEY E2E_TEST_PASSWORD; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
       - name: Install pinned private application dependencies
         working-directory: integrated
         run: pnpm install --frozen-lockfile
@@ -135,7 +136,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/adamon-runtime-gate
-          ref: aa042c154305b20ea4ce41c602b9f98981ba50e7
+          ref: 6b3c4dacbd781f4d6fc0eb17fb2006ce9d58b420
           persist-credentials: false
           path: runner-tests
       - name: Copy synthetic browser tests only into disposable private checkout
@@ -146,6 +147,17 @@ jobs:
         working-directory: integrated
         run: |
           pnpm exec playwright test e2e/import-v2-i3.spec.ts e2e/import-v2-i3-integrated-semantic.spec.ts --reporter=line --retries=0
+      - name: Native PG16 evidence for actual synthetic canonical affiliation and actor audit
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: synthetic-e2e-only
+          PGDATABASE: i3_browser_test
+        run: |
+          psql -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM public.\"PersonInstitutionalAffiliation\" WHERE \"tenantId\"='e2e-mobile-tenant' AND \"personId\"='e2e-mobile-person' AND kind='AVRECH' AND source='SYNTHETIC_FIXTURE_VERIFIED';" | grep -x 1
+          psql -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM public.\"AuditLog\" WHERE \"tenantId\"='e2e-mobile-tenant' AND \"subjectPersonId\"='e2e-mobile-person' AND model='PersonInstitutionalAffiliation' AND action='ASSERTED';" | grep -x 1
+          psql -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM public.\"PersonInstitutionalAffiliation\" WHERE \"personId\"='e2e-mobile-foreign-person';" | grep -x 0
+          echo 'SYNTHETIC_AFFILIATION_DB_AUDIT_AND_TENANT_PASS'
       - name: Final isolated provenance
         if: always()
         shell: bash
