@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 3e958338b35a7467995c5abce55848dad6aa88be
+          ref: 4cbdc7e30f829dabd269fb315a478255326ad582
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -48,7 +48,7 @@ jobs:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "3e958338b35a7467995c5abce55848dad6aa88be"
+          test "$(git rev-parse HEAD)" = "4cbdc7e30f829dabd269fb315a478255326ad582"
           python3 -m unittest discover -s scripts/restore-5786 -v
           node --test scripts/restore-5786/neon_preflight.test.mjs
       - name: Install pinned verification dependencies
@@ -117,14 +117,23 @@ jobs:
       - name: Rehearse all 3,124 synthetic candidates and restore a recovery database
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
-          I56_EXACT_SHA: 3e958338b35a7467995c5abce55848dad6aa88be
+          I56_EXACT_SHA: 4cbdc7e30f829dabd269fb315a478255326ad582
           I56_SYNTHETIC_DEBUG: '1'
           I56_POSTGRES_SERVICE: ${{ job.services.postgres.id }}
           I56_FULL_REHEARSAL: '1'
         run: |
           PGPASSWORD=synthetic-only psql -h 127.0.0.1 -U postgres -d i56_r2 -v ON_ERROR_STOP=1 -c 'CREATE DATABASE i56_full'
           ./node_modules/.bin/prisma db push --schema prisma/schema.prisma --skip-generate
+          export I56_ARCHIVE_PROOF_KEY="$(openssl rand -hex 32)"
+          echo "::add-mask::$I56_ARCHIVE_PROOF_KEY"
+          export I56_SOURCE_PLAN_PATH="$RUNNER_TEMP/i56-synthetic-observations.json"
+          export I56_SYNTHETIC_PLAN_PATH="$I56_SOURCE_PLAN_PATH"
           python3 scripts/restore-5786/full_rehearsal.py
+          export I56_SOURCE_PLAN_SHA256="$(sha256sum "$I56_SOURCE_PLAN_PATH" | cut -d' ' -f1)"
+          export I56_SOURCE_CAMPAIGN_ID="$(python3 -c "import hashlib; print('i56-synthetic-' + hashlib.md5(b'i56-full-synthetic:5786').hexdigest())")"
+          for name in I56_ARCHIVE_PROOF_KEY I56_SOURCE_PLAN_PATH I56_SOURCE_PLAN_SHA256 I56_SOURCE_CAMPAIGN_ID; do
+            echo "$name=${!name}" >> "$GITHUB_ENV"
+          done
           ./node_modules/.bin/vitest run --config .i56-vitest.config.mjs src/actions/historicalCampaignEvents.i56.integration.test.ts
       - uses: pnpm/action-setup@v4
         with:
