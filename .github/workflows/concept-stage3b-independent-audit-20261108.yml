@@ -1,0 +1,68 @@
+name: Stage3B independent cross-seed frozen-checkpoint verdict
+on:
+  push:
+    branches: [ci/concept-stage3b-independent-audit-20261108]
+    paths: [.github/workflows/concept-stage3b-independent-audit-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  independent-verdict:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Ensure read token exists
+        env: {SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: test -n "$SOURCE_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 6ab27d40c7c1ebb60dd3b2d67cc435838a8d7040
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Await exactly the two original two-seed persisted results
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 120); do
+            names=$(gh api repos/toyro396133/adamon-runtime-gate/actions/runs/42450228946/artifacts --jq '.artifacts[].name' || true)
+            if grep -qx "concept-stage3b-seed-7-all-evidence" <<< "$names" &&
+               grep -qx "concept-stage3b-seed-17-all-evidence" <<< "$names"; then
+              echo "Both original independent-seed checkpoint artifacts available"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Original two-seed artifacts incomplete"
+          exit 1
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage3b-seed-7-all-evidence
+          run-id: 42450228946
+          github-token: '${{ github.token }}'
+          path: evidence/stage3b-seed-7
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage3b-seed-17-all-evidence
+          run-id: 42450228946
+          github-token: '${{ github.token }}'
+          path: evidence/stage3b-seed-17
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Real independent two-seed predeclared verdict and Hebrew report
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "6ab27d40c7c1ebb60dd3b2d67cc435838a8d7040"
+          python -u -m research.neural_units.stage3b_cross_seed_verdict \
+            --base ../../evidence --output independent-verdict/stage3b_cross_seed.json
+          test -s independent-verdict/stage3b_cross_seed.json
+          test -s independent-verdict/stage3b_cross_seed.md
+      - name: Save two-seed independent report and verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage3b-independent-cross-seed-verdict
+          path: source/concept-discovery-v2/independent-verdict/*
+          if-no-files-found: warn
+          retention-days: 90
