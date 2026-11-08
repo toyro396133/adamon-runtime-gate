@@ -1,0 +1,81 @@
+name: Concept Lab Stage3A Hebrew event-state QA and PR22 retention
+on:
+  push:
+    branches: [ci/concept-stage3a-event-20261108]
+    paths: [.github/workflows/concept-stage3a-event-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  seed-experiment:
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [7, 17]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 310
+    steps:
+      - name: Verify existing authenticated read token without printing
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: test -n "$TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 02b27fcdd32f9e791568ce23db2ac9ae599c5588
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historic-train
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-cross-entity-2600-protected-seed-7-17
+          run-id: 42433021927
+          github-token: '${{ github.token }}'
+          path: pr22-frozen
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install existing CPU torch, lexical baseline
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'scikit-learn==1.7.2'
+      - name: Focused data and real native gradient tests
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "02b27fcdd32f9e791568ce23db2ac9ae599c5588"
+          python -m unittest tests.test_stage3a_events -v
+      - name: Original-PR22 four-arm question-answering experiment
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          prior=$(find ../../historic-train -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$prior"
+          test "$(find ../../pr22-frozen -type f -name 'continued-shared-structure-seed-*.pt' | wc -l)" -eq 2
+          python -u -m research.neural_units.train_stage3a_events \
+            --seed ${{ matrix.seed }} --checkpoints ../../pr22-frozen \
+            --legacy-train "$prior" \
+            --output results/stage3a-seed-${{ matrix.seed }}
+      - name: Independent sealed QA, retention and lexical controls
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          prior=$(find ../../historic-train -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          python -u -m research.neural_units.evaluate_stage3a_events \
+            --seed ${{ matrix.seed }} \
+            --checkpoints results/stage3a-seed-${{ matrix.seed }} \
+            --legacy-train "$prior" \
+            --output results/stage3a-seed-${{ matrix.seed }}/blind_evaluation.json
+      - name: Archive all 4-arm original/pr22 snapshots, learned reader and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage3a-seed-${{ matrix.seed }}-checkpoints
+          path: |
+            source/concept-discovery-v2/results/stage3a-seed-${{ matrix.seed }}/*.pt
+            source/concept-discovery-v2/results/stage3a-seed-${{ matrix.seed }}/*.json
+          if-no-files-found: warn
+          retention-days: 90
