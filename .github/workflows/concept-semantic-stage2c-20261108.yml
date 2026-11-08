@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: b502b5430f63b9d0c49ba90589862a937565c0dc
+          ref: a605bf6914eb92baf26ee3c387b6e22e753eca7c
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -46,7 +46,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "b502b5430f63b9d0c49ba90589862a937565c0dc"
+          test "$(git rev-parse HEAD)" = "a605bf6914eb92baf26ee3c387b6e22e753eca7c"
           python -m unittest tests.test_semantic_stage2c -v
       - name: Tiny learning capacity and 3 complete epochs for both arms
         working-directory: source/concept-discovery-v2
