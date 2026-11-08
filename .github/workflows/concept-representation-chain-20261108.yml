@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 13bc9fefbaf3f22d3a90834a12714cca57a87ba2
+          ref: 7e1ac44d020378e9c952b02b782ec1131406fbeb
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -35,7 +35,7 @@ jobs:
       - name: Verify pinned source and run two focused safety tests
         working-directory: source/concept-discovery-v2
         run: |
-          test "$(git rev-parse HEAD)" = "13bc9fefbaf3f22d3a90834a12714cca57a87ba2"
+          test "$(git rev-parse HEAD)" = "7e1ac44d020378e9c952b02b782ec1131406fbeb"
           python -m unittest tests.test_representation_chain_diagnostic -v
       - name: Frozen comparisons on inherited PR18 and sealed identities
         shell: bash
