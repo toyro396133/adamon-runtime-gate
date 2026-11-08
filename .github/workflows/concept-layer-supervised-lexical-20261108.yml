@@ -1,0 +1,35 @@
+name: Concept Lab stage1 supervised lexical controls
+on:
+  push:
+    branches: [ci/concept-layer-diagnosis-20261108]
+    paths: [.github/workflows/concept-layer-supervised-lexical-20261108.yml]
+permissions: {contents: read}
+jobs:
+  calibrated-lexical-probes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 6ac9edc122102e4caa2f9076f057e3a58fbba6f6
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU matching probe stack
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Evaluate supervised lexical probes on fixed unseen pairs
+        working-directory: source/concept-discovery-v2
+        run: |
+          test "$(git rev-parse HEAD)" = "6ac9edc122102e4caa2f9076f057e3a58fbba6f6"
+          python -u -m research.neural_units.semantic_layer_supervised_lexical --output results/semantic-layer-diagnosis/supervised_lexical.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage1-supervised-lexical-calibration
+          path: source/concept-discovery-v2/results/semantic-layer-diagnosis/supervised_lexical.json
+          if-no-files-found: warn
