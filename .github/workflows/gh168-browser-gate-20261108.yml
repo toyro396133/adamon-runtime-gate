@@ -1,0 +1,106 @@
+name: GH168 pinned synthetic browser acceptance
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/gh168-browser-gate-20261108.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 42
+    env:
+      EXPECTED_SHA: 20089037e5665db01d174ffd62ea391ae1024341
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_main_e2e
+      NEXT_TELEMETRY_DISABLED: 1
+      NODE_OPTIONS: --max-old-space-size=4096
+      E2E_BASE_URL: http://127.0.0.1:3000
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: chacham_lev_main_e2e
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chacham_lev_main_e2e"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Verify existing read token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - name: Checkout exact private source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 20089037e5665db01d174ffd62ea391ae1024341
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify source SHA
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Generate isolated auth credentials
+        shell: bash
+        run: |
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+      - name: Install private dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Install browser test dependencies
+        working-directory: source
+        run: |
+          pnpm add --save-dev --lockfile=false @playwright/test@1.55.0
+          pnpm exec playwright install --with-deps chromium
+      - name: E2E harness TypeScript
+        working-directory: source
+        run: pnpm exec tsc --noEmit -p e2e/tsconfig.json
+      - name: Build disposable database schema
+        working-directory: source
+        run: pnpm exec prisma db push --skip-generate
+      - name: Seed synthetic mobile fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-mobile-system.ts
+      - name: Seed synthetic management fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-main-system.ts
+      - name: Build isolated application
+        working-directory: source
+        run: pnpm run build
+      - name: Start application
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec next start -H 127.0.0.1 -p 3000 > /tmp/chacham-gh168-e2e.log 2>&1 &
+          echo $! > /tmp/chacham-gh168-e2e.pid
+      - name: Wait for application ready
+        shell: bash
+        run: |
+          for i in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/login >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/chacham-gh168-e2e.log
+          exit 1
+      - name: Main system browser regression
+        working-directory: source
+        run: pnpm exec playwright test e2e/main-system.spec.ts
+      - name: Dump server errors if failed
+        if: failure()
+        run: tail -200 /tmp/chacham-gh168-e2e.log || true
+      - name: Remove private repo
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/source"
