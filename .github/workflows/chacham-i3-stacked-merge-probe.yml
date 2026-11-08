@@ -1,0 +1,58 @@
+name: I3 stack merge probe (private code, no database)
+on:
+  push:
+    branches: [ci/chacham-i3-postmigration-integration-20261108]
+    paths: [.github/workflows/chacham-i3-stacked-merge-probe.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SHA_228: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+      SHA_244: 6d5cd4dd714f26ecfe3e7c3d5db7b8d5835738b4
+    steps:
+      - name: Confirm private read token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 6d5cd4dd714f26ecfe3e7c3d5db7b8d5835738b4
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: integrated
+      - name: Fetch pinned I3 import code without changing either PR
+        working-directory: integrated
+        run: |
+          git fetch --no-tags origin "$SHA_228"
+          test "$(git rev-parse HEAD)" = "$SHA_244"
+          git config user.name 'synthetic-i3-test-only'
+          git config user.email 'synthetic@example.invalid'
+      - name: Prove merge feasibility and list conflicts without code content
+        working-directory: integrated
+        shell: bash
+        run: |
+          set +e
+          git merge --no-commit --no-ff "$SHA_228" > "$RUNNER_TEMP/merge.stdout" 2> "$RUNNER_TEMP/merge.stderr"
+          rc=$?
+          set -e
+          echo "## Private I3 stack merge probe" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR #244: $SHA_244" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR #228: $SHA_228" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo 'MERGE_CONFLICTS_FOUND' 
+            git diff --name-only --diff-filter=U | tee "$RUNNER_TEMP/conflicts.txt"
+            echo "conflicts=$(wc -l < "$RUNNER_TEMP/conflicts.txt")" >> "$GITHUB_STEP_SUMMARY"
+            git merge --abort || true
+            exit 10
+          fi
+          echo "STACK_MERGE_CLEAN" 
+          echo 'Stack merge: clean (not committed, not pushed)' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove private checkout
+        if: always()
+        run: rm -rf "$GITHUB_WORKSPACE/integrated"
