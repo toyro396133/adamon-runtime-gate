@@ -124,7 +124,7 @@ test('admin: synthetic institutional decision validates period, persists with re
   await dialog.locator('input[name="validUntil"]').fill('');
   await dialog.getByRole('button',{name:'שמור הכרעה ידנית'}).click();
   await expect(dialog.getByText('הכרעת השיוך נשמרה עם ראיות וביקורת')).toBeVisible({timeout:20000});
-  await expect(dialog.getByText('משתתף במסגרת האברכים')).toBeVisible();
+  await expect(dialog.locator('strong').filter({hasText:'משתתף במסגרת האברכים'})).toBeVisible();
   await expect(dialog.getByText('תקף כעת')).toBeVisible();
   await expect(dialog.getByText('יומן החלטות',{exact:false})).toBeVisible();
   await page.reload();
@@ -132,4 +132,23 @@ test('admin: synthetic institutional decision validates period, persists with re
   await dialog.getByRole('button',{name:'השתתפות וזיקות'}).click();
   await expect(dialog.getByText('SYNTHETIC_FIXTURE_VERIFIED',{exact:false})).toBeVisible();
   await expect(dialog.getByText('תקף כעת')).toBeVisible();
+});
+
+
+test('post-decision source-history pagination does not display stale first-page rows',async({page})=>{
+  await login(page,'admin');
+  await page.goto('/people/source-evidence?tenantId=e2e-mobile-tenant&sourceKey=1');
+  const history=page.locator('table').nth(1).locator('tbody tr');
+  await expect(history).toHaveCount(100);
+  await page.getByRole('link',{name:'המשך יומן השינויים'}).click();
+  await expect(page).toHaveURL(/afterHistoryRow=100/);
+  try {
+    await expect(history).toHaveCount(1,{timeout:8000});
+  } catch {
+    // Diagnose a possible Next App Router stale display independently of the
+    // native PostgreSQL cursor/read query. No private row content is logged.
+    await page.reload();
+    const countAfterReload=await history.count();
+    throw new Error('I3_HISTORY_CLIENT_NAV_STALE: full_reload_row_count='+countAfterReload);
+  }
 });
