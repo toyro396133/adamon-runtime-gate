@@ -1,0 +1,75 @@
+name: Concept Lab Stage2B checkpoint and six-optimizer forensic audit
+on:
+  push:
+    branches: [ci/concept-semantic-infer-local-stage2b-20261108]
+    paths: [.github/workflows/concept-semantic-stage2b-audit-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2b-native-three-arm-7-17
+          run-id: 42444584575
+          github-token: '${{ github.token }}'
+          path: evidence
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: CPU PyTorch for exact checkpoint tensor comparisons
+        run: python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify all checkpoints and print changes to ONLY original language weights
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, torch, hashlib
+          from pathlib import Path
+          t=json.loads(next(Path("evidence").rglob("training.json")).read_text())
+          ev=json.loads(next(Path("evidence").rglob("independent_evaluation.json")).read_text())
+          assert ev["test"]==144 and ev["holdout"]==144
+          all_model={}
+          six=("optimizer","structural_optimizer","world_optimizer",
+               "discovery_optimizer","identity_optimizer","root_optimizer")
+          def equal(a,b):
+            if isinstance(a,torch.Tensor):return isinstance(b,torch.Tensor) and torch.equal(a,b)
+            if isinstance(a,dict):return isinstance(b,dict) and a.keys()==b.keys() and all(equal(v,b[k]) for k,v in a.items())
+            if isinstance(a,(tuple,list)):return type(a) is type(b) and len(a)==len(b) and all(equal(x,y) for x,y in zip(a,b))
+            return a==b
+          for seed in (7,17):
+            for arm in ("A0","A1","A2"):
+              key=f"{arm}_seed{seed}"
+              meta=t["results"][key]
+              file=next(Path("evidence").rglob(meta["checkpoint"]))
+              assert hashlib.sha256(file.read_bytes()).hexdigest()==meta["checkpoint_sha256"]
+              ckpt=torch.load(file,map_location="cpu",weights_only=True)
+              assert ckpt["schema"]==1 and all(k in ckpt for k in six)
+              assert len(ckpt["experience_memory"]["records"])==9486
+              assert ckpt["config"]["circuits"]*ckpt["config"]["units"]==1024
+              all_model[key]=ckpt
+            baseline=all_model[f"A0_seed{seed}"]
+            assert t["results"][f"A0_seed{seed}"]["source_sha256"]==t["results"][f"A0_seed{seed}"]["checkpoint_sha256"]
+            for arm in ("A1","A2"):
+              key=f"{arm}_seed{seed}";sample=all_model[key];meta=t["results"][key]
+              modified=[k for k,v in baseline["model"].items() if not torch.equal(v,sample["model"][k])]
+              language=lambda x:x.startswith(("embed.","words.","position."))
+              assert not [k for k in modified if not language(k)]
+              assert all(equal(baseline[name],sample[name]) for name in six[1:])
+              assert equal(baseline["experience_memory"],sample["experience_memory"])
+              assert baseline["step"]==sample["step"]
+              assert bool(modified)==meta["accepted"]
+              print("FORENSIC",json.dumps({"seed":seed,"arm":arm,
+                     "accepted":meta["accepted"],
+                     "original_language_modified_tensors":len(modified),
+                     "all_frozen_weights_bit_exact":True,
+                     "all_five_frozen_optimizers_bit_exact":True,
+                     "six_optimizers_in_checkpoint":True,
+                     "journal_records":9486,"physical_units":1024,
+                     "native_numerical_parity_error":
+                         meta.get("native_path_numeric_parity_max_error"),
+                     "native_GRU_gradient":
+                         meta.get("native_gradients_to_original_GRU_and_embedding",{}).get("words.weight_ih_l0")
+                     },ensure_ascii=False),flush=True)
+          print("STAGE2B_CHECKPOINT_FORENSIC_PASS")
+          PY
