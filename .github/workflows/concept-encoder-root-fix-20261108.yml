@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: acd1732a06edfedc698c45e3008681cd3eef47fc
+          ref: 8fa82614f827bb23182c9b5d1d41f177c63f84f9
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -32,10 +32,10 @@ jobs:
         run: |
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install scikit-learn
-      - name: Exactly three targeted tests
+      - name: Exactly four targeted tests
         working-directory: source/concept-discovery-v2
         run: |
-          test "$(git rev-parse HEAD)" = "acd1732a06edfedc698c45e3008681cd3eef47fc"
+          test "$(git rev-parse HEAD)" = "8fa82614f827bb23182c9b5d1d41f177c63f84f9"
           python -m unittest tests.test_encoder_root_continuation -v
       - name: Verify PR18 inputs and TRAIN/SEAL separation
         working-directory: source/concept-discovery-v2
