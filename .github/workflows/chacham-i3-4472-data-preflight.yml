@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      EXPECTED_PRIVATE_SHA: 6e4c797d8c54980d134f8c6e0ad577128fff68e6
+      EXPECTED_PRIVATE_SHA: df8ba55fd48fccf12162d4cb65fccb2f84d5e425
     steps:
       - name: Verify existing private checkout secret
         shell: bash
@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 6e4c797d8c54980d134f8c6e0ad577128fff68e6
+          ref: df8ba55fd48fccf12162d4cb65fccb2f84d5e425
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
