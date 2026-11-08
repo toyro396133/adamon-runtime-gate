@@ -1,0 +1,156 @@
+name: I3 merged code real NextAuth Chromium E2E (synthetic localhost)
+on:
+  push:
+    branches: [ci/chacham-i3-postmigration-integration-20261108]
+    paths: [.github/workflows/chacham-i3-merged-e2e.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chacham-i3-merged-e2e-synthetic-20261108
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-e2e-only
+          POSTGRES_DB: i3_browser_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d i3_browser_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      SHA_228: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+      SHA_244: 6d5cd4dd714f26ecfe3e7c3d5db7b8d5835738b4
+      DATABASE_URL: postgresql://postgres:synthetic-e2e-only@127.0.0.1:5432/i3_browser_test
+      E2E_BASE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_OPTIONS: --max-old-space-size=4096
+      CI: 'true'
+    steps:
+      - name: Require existing read authorization
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 6d5cd4dd714f26ecfe3e7c3d5db7b8d5835738b4
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: integrated
+      - name: Merge exact PR228 and PR244 in disposable worktree only
+        working-directory: integrated
+        shell: bash
+        run: |
+          git fetch --no-tags origin "$SHA_228"
+          test "$(git rev-parse HEAD)" = "$SHA_244"
+          git config user.name 'synthetic-only'
+          git config user.email 'synthetic@example.invalid'
+          set +e
+          git merge --no-commit --no-ff "$SHA_228" > "$RUNNER_TEMP/merge.log" 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            git diff --name-only --diff-filter=U > "$RUNNER_TEMP/conflicts.txt"
+            cat "$RUNNER_TEMP/conflicts.txt"
+            test "$(wc -l < "$RUNNER_TEMP/conflicts.txt")" -eq 4
+            for path in CHANGELOG.en.md CHANGELOG.he.md CONTEXT.md docs/dev/routes.md; do
+              grep -Fxq "$path" "$RUNNER_TEMP/conflicts.txt" || exit 12
+              git checkout --ours -- "$path"
+              git add -- "$path"
+            done
+            test -z "$(git diff --name-only --diff-filter=U)"
+          fi
+          echo "MERGED_TREE_SHA=$(git write-tree)" >> "$GITHUB_ENV"
+          echo "I3_CODE_STACK_IN_MEMORY_MERGED_SUCCESS"
+          git diff --cached --check
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - name: Generate distinct ephemeral session and source evidence secrets
+        shell: bash
+        run: |
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "I3_SOURCE_EVIDENCE_MAC_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+      - name: Install pinned private application dependencies
+        working-directory: integrated
+        run: pnpm install --frozen-lockfile
+      - name: Prisma validation, generated client and disposable native PostgreSQL schema
+        working-directory: integrated
+        run: |
+          pnpm exec prisma validate
+          pnpm exec prisma generate
+          pnpm exec prisma db push --skip-generate
+      - name: Seed authentic NextAuth test users and cross-tenant people
+        working-directory: integrated
+        run: pnpm exec tsx scripts/e2e/seed-mobile-system.ts
+      - name: Seed synthetic I3 source cards, historical evidence and quarantine
+        working-directory: integrated
+        run: node tests/import-v2/i3_browser_seed.mjs
+      - name: Verify compilation of combined private application
+        working-directory: integrated
+        run: |
+          pnpm exec tsc --noEmit
+          pnpm run build
+      - name: Install browser driver only into disposable checkout
+        working-directory: integrated
+        run: |
+          pnpm add --save-dev --lockfile=false @playwright/test@1.55.0
+          pnpm exec playwright install --with-deps chromium
+      - name: Start real production-mode Next.js on localhost
+        working-directory: integrated
+        shell: bash
+        run: |
+          pnpm exec next start -H 127.0.0.1 -p 3000 > "$RUNNER_TEMP/next-e2e.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/next-e2e.pid"
+          for i in {1..100}; do
+            if curl -fsS http://127.0.0.1:3000/login >/dev/null; then
+              echo 'LOCAL_REAL_NEXTJS_UP'; exit 0
+            fi
+            sleep 2
+          done
+          echo 'LOCAL_NEXTJS_UNAVAILABLE'
+          tail -n 40 "$RUNNER_TEMP/next-e2e.log" | sed -E 's/(password|secret|token)[^ ]*/[REDACTED]/gi'
+          exit 15
+      - name: Real NextAuth and Chromium I3 import auth, tenant, quarantine browser acceptance
+        working-directory: integrated
+        run: pnpm exec playwright test e2e/import-v2-i3.spec.ts --reporter=line --retries=0
+      - name: Real NextAuth and Chromium people/relationship management smoke tests
+        working-directory: integrated
+        run: |
+          pnpm exec playwright test e2e/mobile-system.spec.ts --grep 'tenant|person|permission' --reporter=line --retries=0
+      - name: Final isolated provenance
+        if: always()
+        shell: bash
+        run: |
+          echo '## Localhost Next.js + Playwright + Native PG16 integration' >> "$GITHUB_STEP_SUMMARY"
+          echo "PR228 pin: $SHA_228" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR244 pin: $SHA_244" >> "$GITHUB_STEP_SUMMARY"
+          echo "Temporary merged tree: ${MERGED_TREE_SHA:-NOT_REACHED}" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Data: SYNTHETIC ONLY (0 real I3 people)' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NextAuth: authentic synthetic login, dev bypass disabled' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No Neon credentials or production branches touched' >> "$GITHUB_STEP_SUMMARY"
+      - name: Destroy local test server, fixtures and private checkout
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/next-e2e.pid" ]; then kill "$(cat "$RUNNER_TEMP/next-e2e.pid")" || true; fi
+          rm -rf -- "$GITHUB_WORKSPACE/integrated"
+          rm -f -- "$RUNNER_TEMP/next-e2e.log" "$RUNNER_TEMP/next-e2e.pid"
