@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 974d358d257d1feb2c3dae761948925eaa2e05c2
+          ref: 3e958338b35a7467995c5abce55848dad6aa88be
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -46,7 +46,7 @@ jobs:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "974d358d257d1feb2c3dae761948925eaa2e05c2"
+          test "$(git rev-parse HEAD)" = "3e958338b35a7467995c5abce55848dad6aa88be"
           python3 -m unittest discover -s scripts/restore-5786 -v
           node --test scripts/restore-5786/neon_preflight.test.mjs
       - name: Install pinned verification dependencies
@@ -115,7 +115,7 @@ jobs:
       - name: Rehearse all 3,124 synthetic candidates and restore a recovery database
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
-          I56_EXACT_SHA: 974d358d257d1feb2c3dae761948925eaa2e05c2
+          I56_EXACT_SHA: 3e958338b35a7467995c5abce55848dad6aa88be
           I56_SYNTHETIC_DEBUG: '1'
           I56_POSTGRES_SERVICE: ${{ job.services.postgres.id }}
           I56_FULL_REHEARSAL: '1'
@@ -130,6 +130,14 @@ jobs:
           npm install --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit --no-fund @playwright/test@1.55.0
           ./node_modules/.bin/prisma generate --schema prisma/schema.prisma
           ./node_modules/.bin/playwright install chromium
+          node --input-type=module <<'EOF'
+          import fs from 'node:fs';
+          const config = JSON.parse(fs.readFileSync('.i56-tsconfig.json'));
+          config.compilerOptions.jsx = 'preserve';
+          config.files.push('src/app/(authenticated)/campaigns/history/[campaignId]/page.tsx');
+          fs.writeFileSync('.i56-browser-tsconfig.json', JSON.stringify(config));
+          EOF
+          ./node_modules/.bin/tsc --project .i56-browser-tsconfig.json
       - name: Verify the archive with real credentials and Chromium
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
