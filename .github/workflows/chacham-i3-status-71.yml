@@ -1,0 +1,63 @@
+name: Chacham Lev I3 status 71 focused verified gate
+on:
+  push:
+    branches: [ci/chacham-i3-status-71-20261108]
+    paths: [.github/workflows/chacham-i3-status-71.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  focused:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      ACCEPTED_SHA: b6c8a8a21cf6c052d30bfc63ad9e0b41787293e1
+      DATABASE_URL: postgresql://none:none@127.0.0.1:5432/never_connected
+      NEXTAUTH_SECRET: isolated-runner-only
+      AUTH_SECRET: isolated-runner-only
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - name: Require existing private source read token
+        shell: bash
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - name: Checkout exact private I3 semantic candidate
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: b6c8a8a21cf6c052d30bfc63ad9e0b41787293e1
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: private-source
+      - name: Verify exact candidate pin
+        working-directory: private-source
+        run: test "$(git rev-parse HEAD)" = "$ACCEPTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Install frozen dependencies
+        working-directory: private-source
+        run: pnpm install --frozen-lockfile
+      - name: Schema validation and local-only client generation
+        working-directory: private-source
+        run: |
+          pnpm exec prisma validate
+          pnpm exec prisma generate
+      - name: 71-label, affiliation, derived relations, crosswalk pure unit tests
+        working-directory: private-source
+        run: pnpm exec vitest run src/lib/import-v2-legacy-status.test.ts src/lib/import-v2-derived-affinities.test.ts src/lib/import-v2-connection-review-plan.test.ts src/lib/person-institutional-affiliation.test.ts
+      - name: Compile TypeScript integration
+        working-directory: private-source
+        run: pnpm exec tsc --noEmit
+      - name: Focused lint
+        working-directory: private-source
+        run: pnpm exec eslint src/lib/import-v2-legacy-status.ts src/lib/import-v2-derived-affinities.ts src/lib/import-v2-connection-review-plan.ts src/lib/person-institutional-affiliation.ts src/actions/personInstitutionalFactsActions.ts src/actions/importV2ComputedAffinitiesActions.ts src/actions/importV2LegacyStatusReviewActions.ts src/components/PersonInstitutionalFactsTab.tsx src/components/ComputedInstitutionalLinks.tsx src/components/LegacyStatusReviewTab.tsx
+      - name: Clean checkout even on failure
+        if: always()
+        shell: bash
+        run: rm -rf -- "$GITHUB_WORKSPACE/private-source"
