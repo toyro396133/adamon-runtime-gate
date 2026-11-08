@@ -88,3 +88,39 @@ test('anonymous user cannot see canonical people or unverified source evidence',
   await page.goto('/people/source-evidence?tenantId=e2e-mobile-tenant&sourceKey=1');
   await expect(page.locator('body')).not.toContainText('UNVERIFIED_PRIVATE');
 });
+
+
+test('admin: semantic education status is a separate canonical dimension from legacy source',async({page})=>{
+  await login(page,'admin');
+  const dialog=await openPerson(page,'תורם בדיקה');
+  await dialog.getByRole('button',{name:'מצב לימודי'}).click();
+  await expect(dialog.getByText('מצב תקף:',{exact:false})).toBeVisible();
+  await expect(dialog.getByText('ראיות מהייבוא:',{exact:false})).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('UNVERIFIED_PRIVATE');
+});
+
+test('admin: synthetic institutional decision validates period, persists with real database readback and audit',async({page})=>{
+  await login(page,'admin');
+  let dialog=await openPerson(page,'תורם בדיקה');
+  await dialog.getByRole('button',{name:'השתתפות וזיקות'}).click();
+  await expect(dialog.getByText('אין שיוכים שנקבעו ידנית.')).toBeVisible();
+  await dialog.getByLabel('מקור ואסמכתה').fill('SYNTHETIC_FIXTURE_VERIFIED');
+  await dialog.getByLabel('נימוק ואימות עדכניות').fill('Synthetic-only operator-approved enrollment; no real identities');
+  await dialog.locator('input[name="validFrom"]').fill('2027-05-02');
+  await dialog.locator('input[name="validUntil"]').fill('2027-04-01');
+  await dialog.getByRole('button',{name:'שמור הכרעה ידנית'}).click();
+  await expect(dialog.getByRole('alert')).toContainText('טווח תוקף לא תקין');
+  await expect(dialog.getByText('אין שיוכים שנקבעו ידנית.')).toBeVisible();
+  await dialog.locator('input[name="validFrom"]').fill('');
+  await dialog.locator('input[name="validUntil"]').fill('');
+  await dialog.getByRole('button',{name:'שמור הכרעה ידנית'}).click();
+  await expect(dialog.getByText('הכרעת השיוך נשמרה עם ראיות וביקורת')).toBeVisible({timeout:20000});
+  await expect(dialog.getByText('משתתף במסגרת האברכים')).toBeVisible();
+  await expect(dialog.getByText('תקף כעת')).toBeVisible();
+  await expect(dialog.getByText('יומן החלטות',{exact:false})).toBeVisible();
+  await page.reload();
+  dialog=await openPerson(page,'תורם בדיקה');
+  await dialog.getByRole('button',{name:'השתתפות וזיקות'}).click();
+  await expect(dialog.getByText('SYNTHETIC_FIXTURE_VERIFIED',{exact:false})).toBeVisible();
+  await expect(dialog.getByText('תקף כעת')).toBeVisible();
+});
