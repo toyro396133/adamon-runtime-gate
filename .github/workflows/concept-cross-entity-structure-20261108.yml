@@ -1,0 +1,80 @@
+name: Concept Lab cross-entity structure, 2600 novel entities, guarded continuation
+on:
+  push:
+    branches: [ci/concept-cross-entity-structure-20261108]
+    paths: [.github/workflows/concept-cross-entity-structure-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  cross-entity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - name: Ensure GitHub private repo read token exists
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Missing read token"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 4fd7d33cb7d8e2b222a1803567aa44134def716f
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: pr18-frozen
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr18-encoder-root-protected-continuations
+          run-id: 42429916937
+          github-token: '${{ github.token }}'
+          path: pr20-frozen
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: CPU prerequisites only
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Three focused checks
+        working-directory: source/concept-discovery-v2
+        run: |
+          test "$(git rev-parse HEAD)" = "4fd7d33cb7d8e2b222a1803567aa44134def716f"
+          python -m unittest tests.test_cross_entity_structure -v
+      - name: Generate 2600 novel entities and isolated textual templates
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -m research.neural_units.generate_structure_world --output ../../world-2600
+          test "$(wc -l < ../../world-2600/corpus/train.jsonl)" -eq 1800
+          test "$(wc -l < ../../world-2600/corpus/test.jsonl)" -eq 250
+          test "$(wc -l < ../../world-2600/corpus/template_holdout.jsonl)" -eq 250
+      - name: Restore PR20 checkpoints and train ACTUAL infer_local on distinct-entity recurring contexts
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.train_cross_entity_structure \
+            --checkpoints ../../pr20-frozen --world ../../world-2600 \
+            --output results/cross-entity-2600 --steps 80
+          test "$(find results/cross-entity-2600 -name 'continued-shared-structure-seed-*.pt' | wc -l)" -eq 2
+      - name: Blind post-checkpoint evaluation against PR18, PR20 and reversible lesions
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.evaluate_cross_entity_structure \
+            --pr18 ../../pr18-frozen --pr20 ../../pr20-frozen \
+            --new results/cross-entity-2600 --world ../../world-2600 \
+            --output results/cross-entity-2600/independent_blind_evaluation.json
+      - name: Archive two checkpoints, frozen report, evaluation and reproducible world
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-cross-entity-2600-protected-seed-7-17
+          path: |
+            source/concept-discovery-v2/results/cross-entity-2600/*.pt
+            source/concept-discovery-v2/results/cross-entity-2600/*.json
+            world-2600/manifest.json
+          if-no-files-found: warn
