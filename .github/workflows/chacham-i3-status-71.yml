@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
-      ACCEPTED_SHA: b6c8a8a21cf6c052d30bfc63ad9e0b41787293e1
+      ACCEPTED_SHA: 7d5d859ee76efc316cd340df7676b669f92abe49
       DATABASE_URL: postgresql://none:none@127.0.0.1:5432/never_connected
       NEXTAUTH_SECRET: isolated-runner-only
       AUTH_SECRET: isolated-runner-only
@@ -38,8 +38,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: b6c8a8a21cf6c052d30bfc63ad9e0b41787293e1
-          token: ${{ secrets.GH_TOKEN || secrets.CHACHAM_LEV_READ_TOKEN }}
+          ref: 7d5d859ee76efc316cd340df7676b669f92abe49
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
           path: private-source
@@ -62,7 +62,7 @@ jobs:
           pnpm exec prisma generate
       - name: 71-label, affiliation, derived relations, crosswalk pure unit tests
         working-directory: private-source
-        run: pnpm exec vitest run src/lib/import-v2-legacy-status.test.ts src/lib/import-v2-derived-affinities.test.ts src/lib/import-v2-connection-review-plan.test.ts src/lib/person-institutional-affiliation.test.ts
+        run: pnpm exec vitest run src/lib/import-v2-legacy-status.test.ts src/lib/import-v2-derived-affinities.test.ts src/lib/import-v2-connection-review-plan.test.ts src/lib/person-institutional-affiliation.test.ts src/lib/import-v2-status-review-plan.test.ts src/actions/importV2LegacyStatusReviewActions.test.ts
       - name: Compile TypeScript integration
         working-directory: private-source
         run: pnpm exec tsc --noEmit
