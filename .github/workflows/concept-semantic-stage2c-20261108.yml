@@ -1,0 +1,79 @@
+name: Concept Lab Stage2C full semantic retention, learning and candidate analysis
+on:
+  push:
+    branches: [ci/concept-semantic-retention-stage2c-20261108]
+    paths: [.github/workflows/concept-semantic-stage2c-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  train-and-evaluate:
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [7, 17]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 175
+    steps:
+      - name: Confirm existing secure repository access
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Missing existing repo token"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 17a5f361a68e7afca59dde93c923b6ac1b5b3fc0
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historic-train
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-cross-entity-2600-protected-seed-7-17
+          run-id: 42433021927
+          github-token: '${{ github.token }}'
+          path: pr22-frozen
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install original GRU CPU dependencies
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Focused Stage2C data, candidate, gradient tests
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "17a5f361a68e7afca59dde93c923b6ac1b5b3fc0"
+          python -m unittest tests.test_semantic_stage2c -v
+      - name: Tiny learning capacity and 3 complete epochs for both arms
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          prior=$(find ../../historic-train -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$prior"
+          test "$(find ../../pr22-frozen -type f -name 'continued-shared-structure-seed-*.pt' | wc -l)" -eq 2
+          python -u -m research.neural_units.train_semantic_stage2c \
+            --seed ${{ matrix.seed }} --checkpoints ../../pr22-frozen \
+            --legacy-train "$prior" --small-epochs 40 --full-epochs 3 \
+            --output results/stage2c-seed-${{ matrix.seed }}
+      - name: Independent new meanings and information-loss diagnostics
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.evaluate_semantic_stage2c \
+            --seed ${{ matrix.seed }} \
+            --checkpoints results/stage2c-seed-${{ matrix.seed }} \
+            --output results/stage2c-seed-${{ matrix.seed }}/independent_evaluation.json
+      - name: Archive A0, all small/full raw and protected weights, metric reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage2c-seed-${{ matrix.seed }}-all-checkpoints
+          path: |
+            source/concept-discovery-v2/results/stage2c-seed-${{ matrix.seed }}/*.pt
+            source/concept-discovery-v2/results/stage2c-seed-${{ matrix.seed }}/*.json
+          if-no-files-found: warn
+          retention-days: 90
