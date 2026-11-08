@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 6ab27d40c7c1ebb60dd3b2d67cc435838a8d7040
+          ref: 63c9f17cd5fa2ac6c25675f9a6cac06a78eb1fd5
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -53,7 +53,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "6ab27d40c7c1ebb60dd3b2d67cc435838a8d7040"
+          test "$(git rev-parse HEAD)" = "63c9f17cd5fa2ac6c25675f9a6cac06a78eb1fd5"
           python -u -m research.neural_units.stage3b_cross_seed_verdict \
             --base ../../evidence --output independent-verdict/stage3b_cross_seed.json
           test -s independent-verdict/stage3b_cross_seed.json
