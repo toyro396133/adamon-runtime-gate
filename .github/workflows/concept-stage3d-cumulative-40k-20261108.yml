@@ -1,0 +1,792 @@
+name: Stage3D continue two trained neural lineages to 40k
+on:
+  push:
+    branches: [ci/concept-stage3d-cumulative-40k-20261108]
+    paths: [.github/workflows/concept-stage3d-cumulative-40k-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  seed7-15000:
+    name: Stage3D trained seed7 through 15000 steps
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download immutable Stage3C 10000 trained state seed7
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3c-seed-7-step-10000
+          run-id: 42452491645
+          github-token: '${{ github.token }}'
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Focused Stage3D engineering contracts
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          python -m unittest tests.test_stage3d_cumulative -v
+      - name: Continue seed7 exclusively from trained 10000 state to 15000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3c-seed-7-step-10000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3c.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 7 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 15000 \
+            --output results/stage3d-seed-7
+      - name: Archive complete trained 15000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-7-step-15000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-7/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-7/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed7-20000:
+    name: Stage3D trained seed7 through 20000 steps
+    needs: seed7-15000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed7 step15000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-7-step-15000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed7 exclusively from trained 15000 state to 20000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-7-step-15000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 7 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 20000 \
+            --output results/stage3d-seed-7
+      - name: Archive complete trained 20000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-7-step-20000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-7/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-7/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed7-25000:
+    name: Stage3D trained seed7 through 25000 steps
+    needs: seed7-20000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed7 step20000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-7-step-20000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed7 exclusively from trained 20000 state to 25000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-7-step-20000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 7 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 25000 \
+            --output results/stage3d-seed-7
+      - name: Archive complete trained 25000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-7-step-25000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-7/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-7/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed7-30000:
+    name: Stage3D trained seed7 through 30000 steps
+    needs: seed7-25000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed7 step25000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-7-step-25000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed7 exclusively from trained 25000 state to 30000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-7-step-25000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 7 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 30000 \
+            --output results/stage3d-seed-7
+      - name: Archive complete trained 30000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-7-step-30000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-7/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-7/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed7-35000:
+    name: Stage3D trained seed7 through 35000 steps
+    needs: seed7-30000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed7 step30000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-7-step-30000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed7 exclusively from trained 30000 state to 35000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-7-step-30000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 7 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 35000 \
+            --output results/stage3d-seed-7
+      - name: Archive complete trained 35000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-7-step-35000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-7/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-7/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed7-40000:
+    name: Stage3D trained seed7 through 40000 steps
+    needs: seed7-35000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed7 step35000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-7-step-35000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed7 exclusively from trained 35000 state to 40000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-7-step-35000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 7 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 40000 \
+            --output results/stage3d-seed-7
+      - name: Restore original trained 10000 weights for sealed paired comparison
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3c-seed-7-step-10000
+          run-id: 42452491645
+          github-token: '${{ github.token }}'
+          path: baseline
+      - name: Independent sealed historical and NEW evaluation
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          baseline=$(find ../../baseline -type f -name 'stage3c-seed-7-step-10000.pt' | head -1)
+          test -s "$baseline"
+          test -s "$baseline.stage3c.pt"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          final="results/stage3d-seed-7/stage3d-seed-7-step-40000.pt"
+          test -s "$final"
+          test -s "$final.stage3d.pt"
+          python -u -m research.neural_units.evaluate_stage3d_order \
+            --seed 7 --baseline-model "$baseline" \
+            --baseline-state "$baseline.stage3c.pt" \
+            --final-model "$final" --final-state "$final.stage3d.pt" \
+            --legacy-train "$legacy" \
+            --output "results/stage3d-seed-7/sealed_evaluation.json"
+      - name: Archive complete trained 40000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-7-step-40000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-7/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-7/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed17-15000:
+    name: Stage3D trained seed17 through 15000 steps
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download immutable Stage3C 10000 trained state seed17
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3c-seed-17-step-10000
+          run-id: 42452491645
+          github-token: '${{ github.token }}'
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Focused Stage3D engineering contracts
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          python -m unittest tests.test_stage3d_cumulative -v
+      - name: Continue seed17 exclusively from trained 10000 state to 15000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3c-seed-17-step-10000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3c.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 17 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 15000 \
+            --output results/stage3d-seed-17
+      - name: Archive complete trained 15000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-17-step-15000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-17/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-17/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed17-20000:
+    name: Stage3D trained seed17 through 20000 steps
+    needs: seed17-15000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed17 step15000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-17-step-15000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed17 exclusively from trained 15000 state to 20000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-17-step-15000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 17 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 20000 \
+            --output results/stage3d-seed-17
+      - name: Archive complete trained 20000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-17-step-20000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-17/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-17/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed17-25000:
+    name: Stage3D trained seed17 through 25000 steps
+    needs: seed17-20000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed17 step20000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-17-step-20000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed17 exclusively from trained 20000 state to 25000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-17-step-20000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 17 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 25000 \
+            --output results/stage3d-seed-17
+      - name: Archive complete trained 25000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-17-step-25000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-17/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-17/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed17-30000:
+    name: Stage3D trained seed17 through 30000 steps
+    needs: seed17-25000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed17 step25000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-17-step-25000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed17 exclusively from trained 25000 state to 30000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-17-step-25000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 17 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 30000 \
+            --output results/stage3d-seed-17
+      - name: Archive complete trained 30000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-17-step-30000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-17/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-17/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed17-35000:
+    name: Stage3D trained seed17 through 35000 steps
+    needs: seed17-30000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed17 step30000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-17-step-30000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed17 exclusively from trained 30000 state to 35000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-17-step-30000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 17 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 35000 \
+            --output results/stage3d-seed-17
+      - name: Archive complete trained 35000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-17-step-35000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-17/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-17/*.json
+          if-no-files-found: warn
+          retention-days: 90
+  seed17-40000:
+    name: Stage3D trained seed17 through 40000 steps
+    needs: seed17-35000
+    runs-on: ubuntu-24.04
+    timeout-minutes: 355
+    steps:
+      - name: Require connected repository read token
+        env:
+          SOURCE_TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing repository read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 03c431265c2b32ec36d8893c75cfdfad5a350868
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Download previous trained Stage3D seed17 step35000
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-17-step-35000
+          path: prior
+      - name: Original historical TRAIN data for replay measurement
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historical
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned torch and numpy
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Continue seed17 exclusively from trained 35000 state to 40000
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "03c431265c2b32ec36d8893c75cfdfad5a350868"
+          predecessor=$(find ../../prior -type f -name 'stage3d-seed-17-step-35000.pt' | head -1)
+          test -s "$predecessor"
+          state="$predecessor.stage3d.pt"
+          test -s "$state"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          python -u -m research.neural_units.train_stage3d_order \
+            --seed 17 --resume-model "$predecessor" --resume-state "$state" \
+            --legacy-train "$legacy" --steps-until 40000 \
+            --output results/stage3d-seed-17
+      - name: Restore original trained 10000 weights for sealed paired comparison
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3c-seed-17-step-10000
+          run-id: 42452491645
+          github-token: '${{ github.token }}'
+          path: baseline
+      - name: Independent sealed historical and NEW evaluation
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          baseline=$(find ../../baseline -type f -name 'stage3c-seed-17-step-10000.pt' | head -1)
+          test -s "$baseline"
+          test -s "$baseline.stage3c.pt"
+          legacy=$(find ../../historical -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$legacy"
+          final="results/stage3d-seed-17/stage3d-seed-17-step-40000.pt"
+          test -s "$final"
+          test -s "$final.stage3d.pt"
+          python -u -m research.neural_units.evaluate_stage3d_order \
+            --seed 17 --baseline-model "$baseline" \
+            --baseline-state "$baseline.stage3c.pt" \
+            --final-model "$final" --final-state "$final.stage3d.pt" \
+            --legacy-train "$legacy" \
+            --output "results/stage3d-seed-17/sealed_evaluation.json"
+      - name: Archive complete trained 40000 evidence and current state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3d-seed-17-step-40000
+          path: |
+            source/concept-discovery-v2/results/stage3d-seed-17/*.pt
+            source/concept-discovery-v2/results/stage3d-seed-17/*.json
+          if-no-files-found: warn
+          retention-days: 90
