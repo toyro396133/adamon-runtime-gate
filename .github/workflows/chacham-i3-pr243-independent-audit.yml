@@ -1,4 +1,4 @@
-name: Chacham Lev PR243 independent audit (no I3 writes)
+name: PR243 11-finding regression and PG16 full-schema gate
 on:
   push:
     branches: [ci/chacham-i3-status-71-20261108]
@@ -7,9 +7,9 @@ on:
 permissions:
   contents: read
 jobs:
-  audit:
+  regression:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16
@@ -17,199 +17,143 @@ jobs:
           POSTGRES_USER: reviewer
           POSTGRES_PASSWORD: reviewer_local_only
           POSTGRES_DB: audit243
-        ports:
-          - 5432:5432
+        ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U reviewer -d audit243"
           --health-interval 10s --health-timeout 5s --health-retries 8
     env:
-      CANDIDATE_SHA: 988e49fb5349fa93e7c2607c4dab285833712515
+      CANDIDATE_SHA: c873ad846395fdc32e16df4e0d072e525ec09643
       DATABASE_URL: postgresql://reviewer:reviewer_local_only@127.0.0.1:5432/audit243
       AUTH_SECRET: review-local-only-secret
       NEXTAUTH_SECRET: review-local-only-secret
       NEXT_TELEMETRY_DISABLED: 1
     steps:
-      - name: Checkout exact private source at pinned SHA
+      - name: Checkout exact approved private-source SHA
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 988e49fb5349fa93e7c2607c4dab285833712515
+          ref: c873ad846395fdc32e16df4e0d072e525ec09643
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 0
           path: source
-      - name: Assert exact SHA
+      - name: Verify exact SHA
         working-directory: source
-        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+        run: |
+          test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+          echo "PINNED_SHA=$CANDIDATE_SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - uses: pnpm/action-setup@v4
         with:
           version: '11'
-      - name: Install pinned dependencies and Prisma client
+      - name: Install pinned dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Prisma schema validation and generate
         working-directory: source
         run: |
-          pnpm install --frozen-lockfile
+          pnpm exec prisma validate
           pnpm exec prisma generate
-      - name: Native PostgreSQL migration and integrity probes (ephemeral database)
-        id: pg
-        continue-on-error: true
+      - name: Focused R243 regression unit and jsdom tests
+        working-directory: source
+        run: |
+          pnpm exec vitest run src/lib/person-institutional-affiliation.test.ts src/lib/import-v2-connection-review-plan.test.ts src/lib/import-v2-derived-affinities.test.ts src/lib/import-v2-pr243-query-connection.test.ts src/lib/import-v2-legacy-status.test.ts src/lib/import-v2-status-review-plan.test.ts src/actions/personInstitutionalFactsActions.test.ts src/components/import-v2-person-scoped.test.tsx src/actions/importV2LegacyStatusReviewActions.test.ts --reporter=verbose
+      - name: TypeScript integration
+        working-directory: source
+        run: pnpm exec tsc --noEmit
+      - name: Focused ESLint on changed functional files
+        working-directory: source
+        run: pnpm exec eslint src/lib/person-institutional-affiliation.ts src/lib/person-connection-view.ts src/lib/import-v2-connection-review-plan.ts src/lib/import-v2-derived-affinities.ts src/lib/people-query.ts src/actions/personInstitutionalFactsActions.ts src/services/I3EducationCorrectionService.ts src/hooks/usePersonScopedResult.ts src/components/LegacyStatusReviewTab.tsx src/components/ComputedInstitutionalLinks.tsx src/components/PersonInstitutionalFactsTab.tsx src/components/people/PeopleToolbar.tsx src/components/people/FiltersDrawer.tsx
+      - name: Build full pre-S3 baseline from actual main schema
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git show origin/main:prisma/schema.prisma > "$RUNNER_TEMP/main-schema.prisma"
+          python3 - <<'PY'
+          import re,os
+          from pathlib import Path
+          source=Path(os.environ['RUNNER_TEMP'])/'main-schema.prisma'
+          text=source.read_text()
+          match=re.search(r'model AuditLog \{[\s\S]*?\n\}',text)
+          if not match: raise RuntimeError('AuditLog block missing')
+          block=match.group(0)
+          if 'subjectPersonId' not in block: raise RuntimeError('Expected main S3 subject missing')
+          block='\n'.join(line for line in block.split('\n') if 'subjectPersonId' not in line and 'AuditLog_address_subject_lookup_idx' not in line)
+          text=text[:match.start()]+block+text[match.end():]
+          target=Path(os.environ['RUNNER_TEMP'])/'pre-s3-schema.prisma'
+          target.write_text(text)
+          PY
+          pnpm exec prisma migrate diff --from-empty --to-schema-datamodel "$RUNNER_TEMP/pre-s3-schema.prisma" --script > "$RUNNER_TEMP/full-before-s3.sql"
+          psql -X -v ON_ERROR_STOP=1 --dbname="$DATABASE_URL" --file="$RUNNER_TEMP/full-before-s3.sql" >/dev/null
+      - name: Seed 4472 synthetic people and apply S3 then affiliation migration in exact order
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 --dbname="$DATABASE_URL" <<'SQL'
+          INSERT INTO "Tenant" ("id","name","subdomain","createdAt","updatedAt")
+          VALUES ('t1','Temporary Tenant 1','test-t1',now(),now()),('t2','Temporary Tenant 2','test-t2',now(),now());
+          INSERT INTO "Person" ("id","tenantId","firstName","lastName","type","createdAt","updatedAt")
+          SELECT 'mock-' || n, 't1', 'Mock', 'Person', 'DONOR', now(),now()
+          FROM generate_series(1,4472) n;
+          SQL
+          psql -X -v ON_ERROR_STOP=1 --dbname="$DATABASE_URL" --file=prisma/migrations/20261027190000_s3_audit_subject_person_lookup/migration.sql
+          psql -X -v ON_ERROR_STOP=1 --dbname="$DATABASE_URL" --file=prisma/migrations/20261108043000_person_institutional_affiliation/migration.sql
+          psql -X -v ON_ERROR_STOP=1 --dbname="$DATABASE_URL" -c 'SELECT count(*) AS synthetic_people FROM "Person";'
+          pnpm exec prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+      - name: Native PostgreSQL constraint, validity, audit and rollback probes
         working-directory: source
         shell: bash
         run: |
           node --input-type=module <<'NODE'
           import pg from 'pg';
-          import fs from 'node:fs';
-          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
-          const failures=[]; const results=[];
-          await client.connect();
-          try {
-            await client.query('CREATE TABLE "Tenant" ("id" TEXT PRIMARY KEY)');
-            await client.query('CREATE TABLE "Person" ("id" TEXT PRIMARY KEY, "tenantId" TEXT NOT NULL REFERENCES "Tenant"("id"))');
-            await client.query('INSERT INTO "Tenant"("id") VALUES (\'t1\'),(\'t2\')');
-            await client.query('INSERT INTO "Person"("id","tenantId") VALUES (\'p1\',\'t1\'),(\'p2\',\'t2\')');
-            await client.query(fs.readFileSync('prisma/migrations/20261108043000_person_institutional_affiliation/migration.sql','utf8'));
-            results.push('PASS Native PostgreSQL 16 CREATE migration on minimal pre-existing Tenant/Person');
-            const sql='INSERT INTO "PersonInstitutionalAffiliation"("id","tenantId","personId","kind","role","source","rationale","validFrom","decidedById","updatedAt") VALUES ($1,$2,$3,$4,$5,\'verified\',\'reviewed\',$6,\'operator\',NOW())';
-            await client.query(sql,['good','t1','p1','AVRECH','GENERAL',new Date('2026-11-08')]);
-            await client.query('BEGIN');await client.query('SAVEPOINT mismatch');
+          const db=new pg.Client({connectionString:process.env.DATABASE_URL});
+          await db.connect();
+          let passed=0;
+          async function expectSqlState(sql,params,state){
+            await db.query('SAVEPOINT probe');
             try {
-              await client.query(sql,['wrong-tenant','t2','p1','STAFF','GENERAL',new Date('2026-11-08')]);
-              failures.push('HIGH tenant FK: wrong tenantId t2 + Person p1 in t1 was INSERTABLE');
-            } catch(e) {
-              if(e.code==='23503') results.push('PASS Composite tenant/person FK enforced');
-              else failures.push('Unexpected tenant check error '+e.code);
-            }
-            await client.query('ROLLBACK TO SAVEPOINT mismatch');await client.query('COMMIT');
-            await client.query('BEGIN');await client.query('SAVEPOINT duplicate');
-            try{
-              await client.query(sql,['duplicate','t1','p1','AVRECH','GENERAL',new Date('2026-11-08')]);
-              failures.push('HIGH duplicate active institution fact accepted');
-            }catch(e){if(e.code==='23505')results.push('PASS Duplicate active kind/role rejected');else failures.push('Unexpected duplicate check error '+e.code)}
-            await client.query('ROLLBACK TO SAVEPOINT duplicate');await client.query('COMMIT');
-            await client.query(sql,['future','t1','p1','STAFF','GENERAL',new Date('2030-01-01')]);
-            await client.query('BEGIN');await client.query('SAVEPOINT futureend');
-            try{
-              await client.query('UPDATE "PersonInstitutionalAffiliation" SET "isActive"=false,"validUntil"="validFrom" WHERE "id"=\'future\'');
-              results.push('PASS Ending future fact permits equality');
-            }catch(e){
-              if(e.code==='23514')failures.push('HIGH future scheduled fact cannot end: application validUntil=validFrom violates dates CHECK');
-              else failures.push('Unexpected future-end SQL error '+e.code);
-            }
-            await client.query('ROLLBACK TO SAVEPOINT futureend');await client.query('COMMIT');
-          }finally{await client.end();}
-          for(const x of results)console.log(x);
-          for(const x of failures)console.log('AUDIT FINDING: '+x);
-          console.log('Native PG audit issues: '+failures.length);
-          if(failures.length)process.exitCode=1;
+              await db.query(sql,params);
+              throw new Error('SQL unexpectedly accepted violating statement '+state);
+            }catch(err){
+              if(err.code!==state)throw err;
+              passed++;
+            }finally{await db.query('ROLLBACK TO SAVEPOINT probe');}
+          }
+          const ins=`INSERT INTO "PersonInstitutionalAffiliation"
+            ("id","tenantId","personId","kind","role","source","rationale","validFrom","validUntil","decidedById","updatedAt")
+            VALUES($1,$2,$3,$4,'GENERAL','manual','reviewed',$5,$6,'actor',now())`;
+          try{
+            await db.query('BEGIN');
+            const first=await db.query(ins,['a','t1','mock-1','AVRECH','2026-01-01',null]);
+            if(first.rowCount!==1)throw new Error('Expected first affiliation');
+            await expectSqlState(ins,['cross','t2','mock-1','STAFF','2026-01-01',null],'23503');
+            await expectSqlState(ins,['overlap','t1','mock-1','AVRECH','2030-01-01',null],'23P01');
+            await db.query(ins,['future','t1','mock-1','STAFF','2030-01-01',null]);
+            await db.query(`UPDATE "PersonInstitutionalAffiliation" SET "isActive"=false
+              WHERE id='future'`);
+            await db.query(ins,['future-replacement','t1','mock-1','STAFF','2030-01-01',null]);
+            await db.query(ins,['finite','t1','mock-2','AVRECH','2020-01-01','2021-01-01']);
+            await db.query(ins,['renew','t1','mock-2','AVRECH','2021-01-01',null]);
+            await db.query('UPDATE "PersonInstitutionalAffiliation" SET "isActive"=false WHERE id=$1',['finite']);
+            const kept=await db.query('SELECT "validUntil" FROM "PersonInstitutionalAffiliation" WHERE id=$1',['finite']);
+            if(kept.rows[0].validUntil?.toISOString().slice(0,10)!=='2021-01-01')throw new Error('Historical date rewritten');
+            await db.query(`INSERT INTO "AuditLog" ("id","tenantId","userId","model","recordId","action","subjectPersonId","changes","createdAt")
+              VALUES('audit1','t1',null,'PersonInstitutionalAffiliation','a','ASSERTED','mock-1','{}',now())`);
+            const verify=await db.query(`SELECT "subjectPersonId" FROM "AuditLog" WHERE id='audit1'`);
+            if(verify.rows[0].subjectPersonId!=='mock-1')throw new Error('S3 audit readback failure');
+            const n=await db.query('SELECT count(*)::int AS n FROM "Person"');
+            if(n.rows[0].n!==4472)throw new Error('Person count changed');
+            await db.query('ROLLBACK');
+            const after=await db.query('SELECT count(*)::int AS n FROM "PersonInstitutionalAffiliation"');
+            if(after.rows[0].n!==0)throw new Error('Rollback left affiliation rows');
+            console.log('PASS full-schema S3 before I3, 4472 mock people, tenant FK, exclusion, cancel/renew, audit, rollback. SQL state probes:',passed);
+          }catch(err){await db.query('ROLLBACK').catch(()=>{});throw err;}
+          finally{await db.end();}
           NODE
-      - name: Independent connection and person-modal UI tests (runtime)
-        id: ui
-        continue-on-error: true
-        working-directory: source
-        shell: bash
-        run: |
-          cat > src/lib/__independent_pr243_audit.test.tsx <<'TEST'
-          // @vitest-environment jsdom
-          import {describe,expect,it,vi,afterEach} from 'vitest';
-          import React from 'react';
-          import {render,screen,waitFor,cleanup} from '@testing-library/react';
-          import {personConnectionViews} from './person-connection-view';
-          import {planLegacySourceConnections} from './import-v2-connection-review-plan';
-          import {buildPeopleWhere} from './people-query';
-          const {readMock}=vi.hoisted(()=>({readMock:vi.fn()}));
-          vi.mock('@/actions/importV2LegacyStatusReviewActions',()=>({getPersonLegacyStatusReviewAction:readMock}));
-          import {LegacyStatusReviewTab} from '@/components/LegacyStatusReviewTab';
-          afterEach(()=>{cleanup();vi.clearAllMocks()});
-          describe('Independent PR243 boundary regression checks',()=>{
-            it('code 50 great-grandchild reverse endpoint is accurately typed',()=>{
-              const c={id:'e50',fromPersonId:'elder',toPersonId:'younger',
-                connectionType:'GREAT_GRANDPARENT',connectionRole:'SOURCE:GREAT_GRANDPARENT',
-                fromPerson:{id:'elder'},toPerson:{id:'younger'}};
-              const v=personConnectionViews('younger',[c])[0];
-              expect(v.isAmbiguous).toBe(false);
-              expect(v.relationType).toBe('GREAT_GRANDCHILD');
-            });
-            it('does not display a previous person raw Active record while another person loads',async()=>{
-              readMock.mockImplementation((id:string)=>id==='a'
-                ? Promise.resolve({sourceKey:'a1',sourceRow:1,sourceReviewStatus:'historical',
-                  raw:'PRIVATE_PREVIOUS_SOURCE_A',segments:[],proposed:[],issues:[]})
-                : new Promise(()=>{}));
-              const view=render(React.createElement(LegacyStatusReviewTab,{personId:'a'}));
-              await waitFor(()=>expect(screen.queryByText('PRIVATE_PREVIOUS_SOURCE_A')).not.toBeNull());
-              view.rerender(React.createElement(LegacyStatusReviewTab,{personId:'b'}));
-              expect(screen.queryByText('PRIVATE_PREVIOUS_SOURCE_A')).toBeNull();
-            });
-            it('relation candidate plan must identify repeated semantic edge across two source IDs',()=>{
-              const crosswalk=[{sourceKey:'a',personId:'a',tenantId:'t',verified:true},{sourceKey:'b',personId:'b',tenantId:'t',verified:true}];
-              const e={sourceFromKey:'a',sourceToKey:'b',sourceRelationCode:48,sourceIsActive:true};
-              const out=planLegacySourceConnections({tenantId:'t',crosswalk,edges:[{...e,sourceEdgeId:'1'},{...e,sourceEdgeId:'2'}]});
-              expect(out[1].disposition).toBe('BLOCKED');
-            });
-            it('verified staff listing should not also accept unverified Person.type legacy path',()=>{
-              const where=buildPeopleWhere({tenantId:'t',tab:'YESHIVA'});
-              const val=JSON.stringify(where);
-              expect(val).not.toContain('"type":{"in":["STAFF","YESHIVA","RABBI"]}');
-            });
-          });
-          TEST
-          pnpm exec vitest run src/lib/__independent_pr243_audit.test.tsx --reporter=verbose
-      - name: Independent fact authorization and scheduled-ending tests (runtime)
-        id: actions
-        continue-on-error: true
-        working-directory: source
-        shell: bash
-        run: |
-          cat > src/actions/__independent_pr243_actions.test.ts <<'TEST'
-          import {describe,it,expect,vi,beforeEach} from 'vitest';
-          const v=vi.hoisted(()=>({auth:vi.fn(),person:vi.fn(),getFacts:vi.fn(),getAudit:vi.fn(),
-            getFact:vi.fn(),updateFact:vi.fn(),newAudit:vi.fn()}));
-          vi.mock('@/lib/auth-utils',()=>({verifyAuthToken:v.auth}));
-          vi.mock('@/lib/prisma',()=>({prisma:{
-            person:{findUnique:v.person},
-            personInstitutionalAffiliation:{findMany:v.getFacts},
-            auditLog:{findMany:v.getAudit},
-            $transaction:async(cb:any)=>cb({
-              personInstitutionalAffiliation:{findFirst:v.getFact,update:v.updateFact},
-              auditLog:{create:v.newAudit},
-            }),
-          }}));
-          import {getPersonInstitutionalFactsAction,endPersonInstitutionalFactAction} from './personInstitutionalFactsActions';
-          beforeEach(()=>{
-            vi.clearAllMocks();v.person.mockResolvedValue({id:'p1',tenantId:'t'});
-            v.getFacts.mockResolvedValue([{id:'f1',personId:'p1',tenantId:'t',kind:'AVRECH',role:'GENERAL',isActive:true,validFrom:null,validUntil:null}]);
-            v.getAudit.mockResolvedValue([{id:'a1',recordId:'f1',action:'ASSERTED',changes:'private decision audit',userId:'operator',createdAt:new Date()}]);
-            v.getFact.mockResolvedValue({id:'f1',personId:'p1',tenantId:'t',kind:'STAFF',role:'GENERAL',isActive:true,validFrom:new Date('2030-01-01'),validUntil:null});
-            v.newAudit.mockResolvedValue({id:'a2'});v.updateFact.mockResolvedValue({id:'f1'});
-          });
-          describe('Independent PR243 action security gates',()=>{
-            it('VIEW_PEOPLE actor does not receive raw AuditLog events without VIEW_AUDIT_LOGS',async()=>{
-              v.auth.mockResolvedValue({id:'viewer',role:'VIEWER',tenantId:'t'});
-              const result=await getPersonInstitutionalFactsAction('p1');
-              expect(result.events).toEqual([]);
-            });
-            it('ending future effective assignment must not set validUntil equal validFrom',async()=>{
-              v.auth.mockResolvedValue({id:'admin',role:'ADMIN',tenantId:'t'});
-              await endPersonInstitutionalFactAction({personId:'p1',factId:'f1',rationale:'retracted'});
-              const args=v.updateFact.mock.calls[0][0];
-              expect(args.data.validUntil===null || args.data.validUntil>new Date('2030-01-01')).toBe(true);
-            });
-          });
-          TEST
-          pnpm exec vitest run src/actions/__independent_pr243_actions.test.ts --reporter=verbose
-      - name: Report independent audit step results
-        if: always()
-        shell: bash
-        run: |
-          echo "PINNED_SHA=$CANDIDATE_SHA"
-          echo "NATIVE_PG_OUTCOME=${{ steps.pg.outcome }}"
-          echo "UI_AND_CONNECTION_OUTCOME=${{ steps.ui.outcome }}"
-          echo "ACTION_AUTH_AND_VALIDITY_OUTCOME=${{ steps.actions.outcome }}"
-          if [ "${{ steps.pg.outcome }}" != success ] || [ "${{ steps.ui.outcome }}" != success ] || [ "${{ steps.actions.outcome }}" != success ]; then
-            echo 'Independent acceptance invariants failed; do not APPLY/merge.'
-            exit 1
-          fi
-      - name: Erase private checkout
+      - name: Erase private source checkout
         if: always()
         run: rm -rf -- "$GITHUB_WORKSPACE/source"
