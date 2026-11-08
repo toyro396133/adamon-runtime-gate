@@ -1,0 +1,171 @@
+name: I56 approved Neon read-only preflight
+on:
+  push:
+    branches: ['run/i56-readonly-preflight-20261109']
+    paths: ['.github/workflows/i56-neon-readonly-preflight-20261109.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: i56-approved-readonly-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Rebuild exact source and run guarded Neon preflight
+    if: github.repository == 'toyro396133/adamon-runtime-gate' && github.ref == 'refs/heads/run/i56-readonly-preflight-20261109'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PINNED_APP_SHA: cc9b472d2ea0caf870858f25de37ae771b3a48e6
+      PRIVATE_MANIFEST_BLOB_SHA: d0319b27b0237537a31d7cce4b3347418350b816
+      I56_APPROVED_MANIFEST_SHA256: 86e8622b12d344bc9571f83099bec5794aeca402d0c57001799f57b0fcab1113
+      EXPECTED_PLAN_SHA256: 67762423187c78c52fb55a5729423e30665086b24460e1e05c2342f6acad3f84
+      NEON_PROJECT: fragrant-dream-21113210
+      NEON_TARGET: br-morning-shadow-apnttwu8
+      GH_PRIVATE_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+      I56_NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      I56_TARGET_ROLE: ${{ secrets.I56_TARGET_ROLE }}
+      I56_TARGET_PASSWORD: ${{ secrets.I56_TARGET_PASSWORD }}
+      I56_RECOVERY_ROLE: ${{ secrets.I56_RECOVERY_ROLE }}
+      I56_RECOVERY_PASSWORD: ${{ secrets.I56_RECOVERY_PASSWORD }}
+    steps:
+      - name: Require existing private repository and Neon API credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$GH_PRIVATE_TOKEN" || -z "$I56_NEON_API_KEY" ]]; then
+            echo 'BLOCKED_MISSING_PRIVATE_CHECKOUT_OR_NEON_API_TOKEN'
+            exit 2
+          fi
+          command -v psql >/dev/null || { echo 'BLOCKED_PSQL_UNAVAILABLE'; exit 2; }
+      - name: Checkout pinned private code and 15 Active source files
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: cc9b472d2ea0caf870858f25de37ae771b3a48e6
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Check code and materialize only the approved private manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$(git rev-parse HEAD)" = "$PINNED_APP_SHA" || exit 3
+          work="$RUNNER_TEMP/i56-private"
+          mkdir -m 700 "$work"
+          response="$work/manifest-blob-response.json"
+          curl --silent --show-error --fail \
+            -H "Authorization: Bearer $GH_PRIVATE_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/toyro396133/chacham-lev/git/blobs/$PRIVATE_MANIFEST_BLOB_SHA" \
+            -o "$response" || { echo 'BLOCKED_PRIVATE_MANIFEST_READ'; exit 3; }
+          jq -e --arg sha "$PRIVATE_MANIFEST_BLOB_SHA" \
+            '.sha == $sha and .encoding == "base64" and .size == 698' "$response" > /dev/null ||
+            { echo 'BLOCKED_PRIVATE_MANIFEST_BLOB'; exit 3; }
+          jq -r .content "$response" | base64 --decode > "$work/manifest.json"
+          test "$(sha256sum "$work/manifest.json" | cut -d' ' -f1)" = "$I56_APPROVED_MANIFEST_SHA256" ||
+            { echo 'BLOCKED_MANIFEST_DIGEST'; exit 3; }
+          echo 'APPROVED_MANIFEST_BYTES_VERIFIED'
+      - name: Read the I3 crosswalk from isolated target in a read-only transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/i56-private"
+          curl --silent --show-error --fail --get \
+            -H "Authorization: Bearer $I56_NEON_API_KEY" \
+            --data-urlencode "branch_id=$NEON_TARGET" \
+            --data-urlencode 'database_name=neondb' \
+            --data-urlencode 'role_name=neondb_owner' \
+            "https://console.neon.tech/api/v2/projects/$NEON_PROJECT/connection_uri" \
+            -o "$work/private-connection.json" ||
+            { echo 'BLOCKED_NEON_PRIVATE_CONNECTION_LOOKUP'; exit 4; }
+          uri="$(jq -er '.uri | select(startswith("postgresql://") or startswith("postgres://"))' "$work/private-connection.json")" ||
+            { echo 'BLOCKED_NEON_CONNECTION_URI_FORMAT'; exit 4; }
+          echo "::add-mask::$uri"
+          tenant="$(jq -er '.tenant' "$work/manifest.json")"
+          cat > "$work/crosswalk.sql" <<'SQL'
+          SELECT jsonb_build_object(
+            'source_key',s.normalized_key,
+            'id',c.target_id,
+            'tenant_id',CASE WHEN c.target_id IS NULL THEN NULL ELSE :'tenant' END,
+            'version',CASE WHEN c.target_id IS NULL THEN NULL ELSE '1' END,
+            'broken',false
+          )::text
+          FROM import_v2.source_record s
+          LEFT JOIN import_v2.canonical_result c
+            ON c.source_table=s.source_table AND c.row_no=s.row_no
+            AND c.target_table='Person'
+          WHERE s.batch_id='I3-IDENTITY-20261027-01' AND s.source_table='תורמים'
+          ORDER BY s.row_no;
+          SQL
+          PGOPTIONS='-c default_transaction_read_only=on' \
+            psql -d "$uri" -X -qAtw -v ON_ERROR_STOP=1 -v tenant="$tenant" \
+            -f "$work/crosswalk.sql" > "$work/crosswalk.jsonl" 2>/dev/null ||
+            { echo 'BLOCKED_CROSSWALK_READ_ONLY_SQL'; exit 4; }
+          test "$(wc -l < "$work/crosswalk.jsonl")" -eq 4999 ||
+            { echo 'BLOCKED_CROSSWALK_COUNT'; exit 4; }
+          echo 'I3_CROSSWALK_4999_ROWS_READ_ONLY_VERIFIED'
+      - name: Regenerate private plan and verify exact pinned SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/i56-private"
+          tenant="$(jq -er .tenant "$work/manifest.json")"
+          python3 scripts/restore-5786/plan.py \
+            --active 'apps/active/Tables/נתונים_טבלאות_מקושרות' \
+            --crosswalk "$work/crosswalk.jsonl" \
+            --tenant "$tenant" --out "$work/plan.json" \
+            > "$work/source-diagnostic.log" 2>&1 ||
+            { echo 'BLOCKED_PRIVATE_PLAN_RECONSTRUCTION'; exit 5; }
+          actual="$(sha256sum "$work/plan.json" | cut -d' ' -f1)"
+          if [[ "$actual" != "$EXPECTED_PLAN_SHA256" ]]; then
+            echo "BLOCKED_PLAN_FINGERPRINT_MISMATCH actual=$actual"
+            exit 5
+          fi
+          python3 scripts/restore-5786/diagnose_existing.py \
+            --active 'apps/active/Tables/נתונים_טבלאות_מקושרות' \
+            --plan "$work/plan.json" > /dev/null 2>&1 ||
+            { echo 'BLOCKED_PLAN_SOURCE_EVIDENCE'; exit 5; }
+          echo 'APPROVED_REAL_SOURCE_PLAN_VERIFIED'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require isolated read-only PostgreSQL role credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in I56_TARGET_ROLE I56_TARGET_PASSWORD I56_RECOVERY_ROLE I56_RECOVERY_PASSWORD; do
+            if [[ -z "${!key}" ]]; then
+              echo "BLOCKED_SECRET_MISSING_$key"
+              exit 6
+            fi
+          done
+          echo 'READ_ONLY_CREDENTIALS_PRESENT'
+      - name: Install isolated PostgreSQL Node client
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/i56-pg"
+          printf '%s\n' '{"name":"i56-preflight","private":true}' > "$RUNNER_TEMP/i56-pg/package.json"
+          npm install --prefix "$RUNNER_TEMP/i56-pg" --package-lock=false \
+            --ignore-scripts --no-audit --no-fund pg@8.14.1 > "$RUNNER_TEMP/i56-npm.log" 2>&1 ||
+            { echo 'BLOCKED_NODE_PG_INSTALL'; exit 7; }
+          ln -s "$RUNNER_TEMP/i56-pg/node_modules" node_modules
+      - name: Execute original guarded TLS preflight, read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/i56-private"
+          node scripts/restore-5786/neon_preflight.mjs \
+            "$work/manifest.json" \
+            'apps/active/Tables/נתונים_טבלאות_מקושרות' \
+            "$work/plan.json"
+      - name: Public-safe result summary
+        if: success()
+        run: echo 'I56_NEON_READ_ONLY_PREFLIGHT_VERIFIED' >> "$GITHUB_STEP_SUMMARY"
