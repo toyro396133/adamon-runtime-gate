@@ -22,7 +22,7 @@ jobs:
           --health-cmd "pg_isready -U reviewer -d audit243"
           --health-interval 10s --health-timeout 5s --health-retries 8
     env:
-      CANDIDATE_SHA: 58753e6d2825156990c86ca2f0476915b87d749d
+      CANDIDATE_SHA: 20b46c2412e96a66949d77f8b4c5e640c1bcc24e
       DATABASE_URL: postgresql://reviewer:reviewer_local_only@127.0.0.1:5432/audit243
       AUTH_SECRET: review-local-only-secret
       NEXTAUTH_SECRET: review-local-only-secret
@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 58753e6d2825156990c86ca2f0476915b87d749d
+          ref: 20b46c2412e96a66949d77f8b4c5e640c1bcc24e
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 0
