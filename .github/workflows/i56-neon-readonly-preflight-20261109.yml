@@ -118,7 +118,7 @@ jobs:
           work="$RUNNER_TEMP/i56-private"
           tenant="$(jq -er .tenant "$work/manifest.json")"
           python3 scripts/restore-5786/plan.py \
-            --active 'apps/active/Tables/נתונים_טבלאות_מקושרות' \
+            --active 'apps/active' \
             --crosswalk "$work/crosswalk.jsonl" \
             --tenant "$tenant" --out "$work/plan.json" \
             > "$work/source-diagnostic.log" 2>&1 ||
@@ -129,7 +129,7 @@ jobs:
             exit 5
           fi
           python3 scripts/restore-5786/diagnose_existing.py \
-            --active 'apps/active/Tables/נתונים_טבלאות_מקושרות' \
+            --active 'apps/active' \
             --plan "$work/plan.json" > /dev/null 2>&1 ||
             { echo 'BLOCKED_PLAN_SOURCE_EVIDENCE'; exit 5; }
           echo 'APPROVED_REAL_SOURCE_PLAN_VERIFIED'
@@ -164,7 +164,7 @@ jobs:
           work="$RUNNER_TEMP/i56-private"
           node scripts/restore-5786/neon_preflight.mjs \
             "$work/manifest.json" \
-            'apps/active/Tables/נתונים_טבלאות_מקושרות' \
+            'apps/active' \
             "$work/plan.json"
       - name: Public-safe result summary
         if: success()
