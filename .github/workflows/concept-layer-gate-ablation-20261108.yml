@@ -1,0 +1,50 @@
+name: Concept Lab stage1 reversible discovery gate ablation
+on:
+  push:
+    branches: [ci/concept-layer-diagnosis-20261108]
+    paths: [.github/workflows/concept-layer-gate-ablation-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  gate-ablation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 0f5787d89e49577c99ec7ba79323b1278fb5140a
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr18-encoder-root-protected-continuations
+          run-id: 42429916937
+          github-token: '${{ github.token }}'
+          path: pr20-original
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-cross-entity-2600-protected-seed-7-17
+          run-id: 42433021927
+          github-token: '${{ github.token }}'
+          path: pr22-original
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install PyTorch CPU and decoder dependencies
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Suppress two learned slot_gate rows and restore exact weights
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0f5787d89e49577c99ec7ba79323b1278fb5140a"
+          python -u -m research.neural_units.ablate_semantic_gate \
+            --pr20 ../../pr20-original --pr22 ../../pr22-original \
+            --output results/semantic-layer-diagnosis/selective_slot_gate_ablation.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage1-selective-slot-gate-ablation
+          path: source/concept-discovery-v2/results/semantic-layer-diagnosis/selective_slot_gate_ablation.json
+          if-no-files-found: warn
