@@ -149,8 +149,19 @@ jobs:
           fs.writeFileSync('.i56-browser-tsconfig.json', JSON.stringify(config));
           EOF
           ./node_modules/.bin/tsc --project .i56-browser-tsconfig.json
-      - name: Install Chromium for authenticated E2E
-        run: ./node_modules/.bin/playwright install chromium > "$RUNNER_TEMP/i56-chromium.log" 2>&1 || { tail -30 "$RUNNER_TEMP/i56-chromium.log"; exit 1; }
+      - name: Select an isolated Chromium-based browser
+        run: |
+          if command -v google-chrome >/dev/null; then
+            google-chrome --version
+            cat > .i56-playwright.config.ts <<'EOF'
+          import base from './playwright.config';
+          export default { ...base, use: { ...base.use, channel: 'chrome' } };
+          EOF
+            echo 'I56_BROWSER_CONFIG=.i56-playwright.config.ts' >> "$GITHUB_ENV"
+          else
+            ./node_modules/.bin/playwright install --with-deps chromium > "$RUNNER_TEMP/i56-chromium.log" 2>&1 || { tail -30 "$RUNNER_TEMP/i56-chromium.log"; exit 1; }
+            echo 'I56_BROWSER_CONFIG=playwright.config.ts' >> "$GITHUB_ENV"
+          fi
       - name: Verify the archive with real credentials and Chromium
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
@@ -197,6 +208,6 @@ jobs:
             kill -0 "$server" || { tail -60 "$RUNNER_TEMP/i56-next.log"; exit 1; }
             sleep 2
           done
-          ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --retries=0 --reporter=line || {
+          ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line || {
             tail -80 "$RUNNER_TEMP/i56-next.log"; exit 1;
           }
