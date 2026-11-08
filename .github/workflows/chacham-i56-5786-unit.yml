@@ -1,4 +1,4 @@
-name: I5 I6 5786 planner unit tests
+name: I5 I6 5786 review regressions
 on:
   push:
     branches: ['run/i56-5786-tests-20261108']
@@ -7,23 +7,31 @@ permissions: {}
 jobs:
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
-      - name: Verify the existing private checkout secret
-        env:
-          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
-        run: test -n "$READ_TOKEN"
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 35025e1a159134e79ab341b5e69d3eb6dcb9ea28
+          ref: a7129d6052f3e8117e458c9cddc99d4e88e41362
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
             scripts/restore-5786
             scripts/import-v2/audit_source.py
+            src
+            package.json
+            package-lock.json
+            vitest.config.ts
+            tsconfig.json
           sparse-checkout-cone-mode: false
-      - name: Test the pinned code
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify the pinned code and Python suite
         run: |
-          test "$(git rev-parse HEAD)" = "35025e1a159134e79ab341b5e69d3eb6dcb9ea28"
+          test "$(git rev-parse HEAD)" = "a7129d6052f3e8117e458c9cddc99d4e88e41362"
           python3 -m unittest discover -s scripts/restore-5786 -v
+      - name: Install test dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run the historical access and assignment suites
+        run: npm test -- src/services/AnnualStudentGroupAssignmentService.test.ts src/actions/historicalAnnualGroupAssignmentActions.test.ts
