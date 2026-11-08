@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: dfef3336b14034f1d979281095b20180c695e638
+          ref: 37a186903d6765076d554f184adae557cc91c121
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -41,7 +41,7 @@ jobs:
       - name: Three focused checks
         working-directory: source/concept-discovery-v2
         run: |
-          test "$(git rev-parse HEAD)" = "dfef3336b14034f1d979281095b20180c695e638"
+          test "$(git rev-parse HEAD)" = "37a186903d6765076d554f184adae557cc91c121"
           python -m unittest tests.test_cross_entity_structure -v
       - name: Generate 2600 novel entities and isolated textual templates
         working-directory: source/concept-discovery-v2
