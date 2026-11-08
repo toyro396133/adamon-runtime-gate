@@ -19,14 +19,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 43f0ff1e6235af7e3a4a4fbc8de6f050c58f7fd7
+          ref: a85a86534f92c9d04f1fd64460768fd8c9dcfd9c
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           path: private-source
       - name: Verify exact source revision and scripts parse
         shell: bash
         run: |
-          test "$(git -C private-source rev-parse HEAD)" = '43f0ff1e6235af7e3a4a4fbc8de6f050c58f7fd7'
+          test "$(git -C private-source rev-parse HEAD)" = 'a85a86534f92c9d04f1fd64460768fd8c9dcfd9c'
           bash -n private-source/scripts/import-v2/i3_schema_migrations_preflight.sh
           bash -n private-source/scripts/import-v2/i3_schema_migrations_postflight.sh
           bash -n private-source/scripts/import-v2/i3_post_import_recovery_protection_gate.sh
@@ -63,7 +63,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 43f0ff1e6235af7e3a4a4fbc8de6f050c58f7fd7
+          ref: a85a86534f92c9d04f1fd64460768fd8c9dcfd9c
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           path: private-source
