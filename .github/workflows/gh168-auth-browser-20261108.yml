@@ -156,12 +156,25 @@ jobs:
             expect(crossTenant.body).not.toContain('תורם מוסד זר');
             await field.fill('מוסד זר');
             await expect(page.getByText('תורם מוסד זר')).toHaveCount(0);
+            // In this repository VIEWER legitimately includes VIEW_PEOPLE.
+            // STUDENT is therefore allowed a same-tenant read, never a foreign-tenant read.
             const student = await browser.newContext({ baseURL: 'http://127.0.0.1:3000', locale: 'he-IL' });
             const studentPage = await student.newPage();
             await signIn(studentPage, '052-1234504');
-            const denied = await perform(studentPage, 'e2e-mobile-tenant', 'ללא טלפון');
-            expect(denied.status).toBeGreaterThanOrEqual(400);
-            expect(denied.body).not.toContain('תורם ללא טלפון');
+            const viewerOwnTenant = await perform(studentPage, 'e2e-mobile-tenant', 'ללא טלפון');
+            expect(viewerOwnTenant.status).toBe(200);
+            expect(viewerOwnTenant.body).toContain('ללא טלפון');
+            const viewerForeign = await perform(studentPage, 'e2e-mobile-foreign-tenant', 'מוסד זר');
+            expect(viewerForeign.status).toBeGreaterThanOrEqual(400);
+            expect(viewerForeign.body).not.toContain('תורם מוסד זר');
+            // A visitor with no authenticated session must never read Person data.
+            const visitor = await browser.newContext({ baseURL: 'http://127.0.0.1:3000' });
+            const visitorPage = await visitor.newPage();
+            await visitorPage.goto('/login');
+            const anonymous = await perform(visitorPage, 'e2e-mobile-tenant', 'ללא טלפון');
+            expect(anonymous.status).toBeGreaterThanOrEqual(400);
+            expect(anonymous.body).not.toContain('תורם ללא טלפון');
+            await visitor.close();
             await student.close();
             await admin.close();
           });
