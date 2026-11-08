@@ -135,7 +135,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/adamon-runtime-gate
-          ref: 720e3de2ae430059d4110b69ed0c35ee9039cc23
+          ref: cdc927fbc1adb131916d1ad2a83e81b4983a504c
           persist-credentials: false
           path: runner-tests
       - name: Copy synthetic browser tests only into disposable private checkout
