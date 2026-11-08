@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 57cfae0a0e8c6443062590ade81d5a1e2292fd37
+          ref: 6f6c6b14ae567f5d05cfd523d84498ac8af254c3
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -38,7 +38,7 @@ jobs:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "57cfae0a0e8c6443062590ade81d5a1e2292fd37"
+          test "$(git rev-parse HEAD)" = "6f6c6b14ae567f5d05cfd523d84498ac8af254c3"
           python3 -m unittest discover -s scripts/restore-5786 -v
       - name: Install pinned verification dependencies
         run: |
@@ -101,4 +101,4 @@ jobs:
           import { fileURLToPath } from 'node:url';
           export default { resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } } };
           EOF
-          ./node_modules/.bin/vitest run --config .i56-vitest.config.mjs src/services/AnnualStudentGroupAssignmentService.test.ts src/actions/historicalAnnualGroupAssignmentActions.test.ts src/services/AnnualRouteCampaignService.test.ts src/services/AnnualStudentGroupAssignmentService.i56.integration.test.ts src/services/AnnualRouteStopService.test.ts src/services/AnnualRouteStopService.order.test.ts src/actions/c2Actions.test.ts src/actions/routeKnowledgeActions.test.ts
+          ./node_modules/.bin/vitest run --config .i56-vitest.config.mjs src/services/AnnualStudentGroupAssignmentService.test.ts src/actions/historicalAnnualGroupAssignmentActions.test.ts src/services/AnnualRouteCampaignService.test.ts src/services/AnnualStudentGroupAssignmentService.i56.integration.test.ts src/services/AnnualRouteStopService.test.ts src/services/AnnualRouteStopService.order.test.ts src/actions/c2Actions.test.ts src/actions/routeKnowledgeActions.test.ts src/services/DigitalBatonPassService.test.ts
