@@ -15,9 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      EXPECTED_SHA: 20089037e5665db01d174ffd62ea391ae1024341
-      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/gh168_isolated
-      PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/gh168_isolated
+      EXPECTED_SHA: c40a9a9e43e543f64988d9ccf3426013d8d146dd
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/gh168_test
+      PEOPLE_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/gh168_test
       NEXT_TELEMETRY_DISABLED: 1
       NODE_OPTIONS: --max-old-space-size=4096
       NEXTAUTH_SECRET: ephemeral-ci-only-no-real-session
@@ -27,11 +27,11 @@ jobs:
         image: postgres:18
         env:
           POSTGRES_USER: postgres
-          POSTGRES_DB: gh168_isolated
+          POSTGRES_DB: gh168_test
           POSTGRES_HOST_AUTH_METHOD: trust
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U postgres -d gh168_isolated"
+          --health-cmd "pg_isready -U postgres -d gh168_test"
           --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - name: Ensure existing private-read token
@@ -44,7 +44,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 20089037e5665db01d174ffd62ea391ae1024341
+          ref: c40a9a9e43e543f64988d9ccf3426013d8d146dd
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
