@@ -1,0 +1,177 @@
+name: GH168 role and tenant isolation browser security gate
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/gh168-auth-browser-20261108.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 42
+    env:
+      EXPECTED_SHA: 2315bda507f802faf5890ec1d9ad26b81030679f
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/chacham_lev_main_e2e
+      NEXT_TELEMETRY_DISABLED: 1
+      NODE_OPTIONS: --max-old-space-size=4096
+      E2E_BASE_URL: http://127.0.0.1:3000
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: chacham_lev_main_e2e
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chacham_lev_main_e2e"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Verify existing read token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - name: Checkout exact private source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 2315bda507f802faf5890ec1d9ad26b81030679f
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Verify source SHA
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Generate isolated auth credentials
+        shell: bash
+        run: |
+          echo "NEXTAUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+      - name: Install private dependencies
+        working-directory: source
+        run: pnpm install --frozen-lockfile
+      - name: Install browser test dependencies
+        working-directory: source
+        run: |
+          pnpm add --save-dev --lockfile=false @playwright/test@1.55.0
+          pnpm exec playwright install --with-deps chromium
+      - name: E2E harness TypeScript
+        working-directory: source
+        run: pnpm exec tsc --noEmit -p e2e/tsconfig.json
+      - name: Build disposable database schema
+        working-directory: source
+        run: pnpm exec prisma db push --skip-generate
+      - name: Seed synthetic mobile fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-mobile-system.ts
+      - name: Seed synthetic management fixture
+        working-directory: source
+        run: pnpm exec tsx scripts/e2e/seed-main-system.ts
+      - name: Build isolated application
+        working-directory: source
+        run: pnpm run build
+      - name: Start application
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec next start -H 127.0.0.1 -p 3000 > /tmp/chacham-gh168-e2e.log 2>&1 &
+          echo $! > /tmp/chacham-gh168-e2e.pid
+      - name: Wait for application ready
+        shell: bash
+        run: |
+          for i in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:3000/login >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/chacham-gh168-e2e.log
+          exit 1
+      - name: Generate isolated role and tenant browser regression
+        working-directory: source
+        shell: bash
+        run: |
+          cat > e2e/gh168-auth-search.spec.ts <<'GH168_SPEC'
+          import { expect, test, type Browser, type Page } from '@playwright/test';
+          
+          const PW = process.env.E2E_TEST_PASSWORD!;
+          async function signIn(page: Page, phone: string) {
+            await page.goto('/login');
+            await page.getByLabel('מספר טלפון').fill(phone);
+            await page.getByLabel('סיסמה').fill(PW);
+            await page.getByRole('button', { name: 'התחבר', exact: true }).click();
+            await page.waitForURL('**/dashboard');
+          }
+          test('real authenticated relationship search respects tenant and role', async ({ browser }) => {
+            test.setTimeout(120000);
+            const admin = await browser.newContext({ baseURL: 'http://127.0.0.1:3000', locale: 'he-IL' });
+            const page = await admin.newPage();
+            await signIn(page, '052-1234507');
+            await page.goto('/people');
+            await page.getByRole('button', { name: 'תורם בדיקה', exact: true }).first().click();
+            await page.getByRole('button', { name: 'קשרים', exact: true }).click();
+            await page.getByRole('button', { name: 'הצג מפת קשרים' }).click();
+            await page.getByText('הוסף קשר לאדם זה').click();
+            const field = page.getByPlaceholder('חפש תורם לפי שם...');
+            const pending = page.waitForRequest(req => req.method() === 'POST' &&
+              !!req.headers()['next-action'] &&
+              !!req.postData()?.includes('ללא טלפון'), { timeout: 20000 });
+            await field.fill('ללא טלפון');
+            const issued = await pending;
+            await expect(page.getByText(/תורם ללא טלפון/)).toBeVisible({ timeout: 20000 });
+            const rawBody = issued.postData() || '';
+            const params = JSON.parse(rawBody);
+            expect(Array.isArray(params)).toBe(true);
+            expect(params[0]).toBe('e2e-mobile-tenant');
+            const nextAction = issued.headers()['next-action'];
+            const headers: Record<string,string> = {
+              'Next-Action': nextAction,
+              'Content-Type': issued.headers()['content-type'] || 'text/plain;charset=UTF-8',
+              'Accept': issued.headers()['accept'] || 'text/x-component',
+            };
+            for (const name of ['next-router-state-tree', 'next-url']) {
+              if (issued.headers()[name]) headers[name] = issued.headers()[name];
+            }
+            const perform = async (target: Page, tenant: string, query: string) => {
+              const args = JSON.stringify([tenant, query, 6]);
+              return target.evaluate(async ({ url, headers, args }) => {
+                const response = await fetch(url, { method: 'POST', headers, body: args, credentials: 'same-origin' });
+                const body = await response.text();
+                return { status: response.status, body };
+              }, { url: issued.url(), headers, args });
+            };
+            const own = await perform(page, 'e2e-mobile-tenant', 'ללא טלפון');
+            expect(own.status).toBe(200);
+            expect(own.body).toContain('ללא טלפון');
+            const crossTenant = await perform(page, 'e2e-mobile-foreign-tenant', 'מוסד זר');
+            expect(crossTenant.status).toBeGreaterThanOrEqual(400);
+            expect(crossTenant.body).not.toContain('תורם מוסד זר');
+            await field.fill('מוסד זר');
+            await expect(page.getByText('תורם מוסד זר')).toHaveCount(0);
+            const student = await browser.newContext({ baseURL: 'http://127.0.0.1:3000', locale: 'he-IL' });
+            const studentPage = await student.newPage();
+            await signIn(studentPage, '052-1234504');
+            const denied = await perform(studentPage, 'e2e-mobile-tenant', 'ללא טלפון');
+            expect(denied.status).toBeGreaterThanOrEqual(400);
+            expect(denied.body).not.toContain('תורם ללא טלפון');
+            await student.close();
+            await admin.close();
+          });
+          GH168_SPEC
+      - name: Run focused authenticated security gate
+        working-directory: source
+        run: pnpm exec playwright test e2e/gh168-auth-search.spec.ts
+      - name: Dump server errors if failed
+        if: failure()
+        run: tail -200 /tmp/chacham-gh168-e2e.log || true
+      - name: Remove private repo
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/source"
