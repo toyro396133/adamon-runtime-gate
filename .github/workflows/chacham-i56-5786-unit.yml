@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 8a46c43814e5b860fb6ab9a15b661b7bccfb292f
+          ref: cc9b472d2ea0caf870858f25de37ae771b3a48e6
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -48,7 +48,7 @@ jobs:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "8a46c43814e5b860fb6ab9a15b661b7bccfb292f"
+          test "$(git rev-parse HEAD)" = "cc9b472d2ea0caf870858f25de37ae771b3a48e6"
           python3 -m unittest discover -s scripts/restore-5786 -v
           node --test scripts/restore-5786/neon_preflight.test.mjs
       - name: Install pinned verification dependencies
@@ -117,7 +117,7 @@ jobs:
       - name: Rehearse all 3,124 synthetic candidates and restore a recovery database
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
-          I56_EXACT_SHA: 8a46c43814e5b860fb6ab9a15b661b7bccfb292f
+          I56_EXACT_SHA: cc9b472d2ea0caf870858f25de37ae771b3a48e6
           I56_SYNTHETIC_DEBUG: '1'
           I56_POSTGRES_SERVICE: ${{ job.services.postgres.id }}
           I56_FULL_REHEARSAL: '1'
