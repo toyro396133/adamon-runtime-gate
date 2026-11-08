@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 852b5db213384a7e0005b2fcadade55f2c4ac2d0
+          ref: 57cfae0a0e8c6443062590ade81d5a1e2292fd37
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -38,13 +38,13 @@ jobs:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "852b5db213384a7e0005b2fcadade55f2c4ac2d0"
+          test "$(git rev-parse HEAD)" = "57cfae0a0e8c6443062590ade81d5a1e2292fd37"
           python3 -m unittest discover -s scripts/restore-5786 -v
       - name: Install pinned verification dependencies
         run: |
           mkdir -p "$RUNNER_TEMP/i56-r2"
           printf '%s\n' '{"name":"i56-r2","private":true}' > "$RUNNER_TEMP/i56-r2/package.json"
-          (cd "$RUNNER_TEMP/i56-r2" && npm install --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit --no-fund vitest@4.1.7 vite@8.0.14 typescript@5.9.3 @types/node@22 prisma@5.22.0 @prisma/client@5.22.0 next@15.5.18 react@19 react-dom@19)
+          (cd "$RUNNER_TEMP/i56-r2" && npm install --package-lock=false --legacy-peer-deps --ignore-scripts --no-audit --no-fund vitest@4.1.7 vite@8.0.14 typescript@5.9.3 @types/node@22 prisma@5.22.0 @prisma/client@5.22.0 next@15.5.18 react@19 react-dom@19 uuid@14.0.0)
           ln -s "$RUNNER_TEMP/i56-r2/node_modules" node_modules
       - name: Generate Prisma and initialize disposable PostgreSQL
         run: |
@@ -54,7 +54,7 @@ jobs:
         run: |
           cat > .i56-auth.d.ts <<'EOF'
           export function verifyAuthToken(roles?: string[], tenantId?: string):
-            Promise<{ id: string; role: string; tenantId: string }>;
+            Promise<{ id: string; role: string; tenantId: string; name?: string | null }>;
           EOF
           cat > .i56-auth-session.d.ts <<'EOF'
           export function auth(): Promise<{ user: { id: string; role: string; tenantId: string } } | null>;
@@ -101,4 +101,4 @@ jobs:
           import { fileURLToPath } from 'node:url';
           export default { resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } } };
           EOF
-          ./node_modules/.bin/vitest run --config .i56-vitest.config.mjs src/services/AnnualStudentGroupAssignmentService.test.ts src/actions/historicalAnnualGroupAssignmentActions.test.ts src/services/AnnualRouteCampaignService.test.ts src/services/AnnualStudentGroupAssignmentService.i56.integration.test.ts src/services/AnnualRouteStopService.test.ts src/services/AnnualRouteStopService.order.test.ts src/actions/c2Actions.test.ts
+          ./node_modules/.bin/vitest run --config .i56-vitest.config.mjs src/services/AnnualStudentGroupAssignmentService.test.ts src/actions/historicalAnnualGroupAssignmentActions.test.ts src/services/AnnualRouteCampaignService.test.ts src/services/AnnualStudentGroupAssignmentService.i56.integration.test.ts src/services/AnnualRouteStopService.test.ts src/services/AnnualRouteStopService.order.test.ts src/actions/c2Actions.test.ts src/actions/routeKnowledgeActions.test.ts
