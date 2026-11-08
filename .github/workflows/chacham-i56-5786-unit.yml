@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: e6a32cfcc2e3914754aaa496f5ca4cba418e7356
+          ref: d9b767120119ed1fa25fa76d57972ee9862ca72d
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           sparse-checkout: |
@@ -38,7 +38,7 @@ jobs:
           node-version: '22'
       - name: Check exact SHA and Python regressions
         run: |
-          test "$(git rev-parse HEAD)" = "e6a32cfcc2e3914754aaa496f5ca4cba418e7356"
+          test "$(git rev-parse HEAD)" = "d9b767120119ed1fa25fa76d57972ee9862ca72d"
           python3 -m unittest discover -s scripts/restore-5786 -v
       - name: Install pinned verification dependencies
         run: |
@@ -106,7 +106,7 @@ jobs:
       - name: Rehearse all 3,124 synthetic candidates and restore a recovery database
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
-          I56_EXACT_SHA: e6a32cfcc2e3914754aaa496f5ca4cba418e7356
+          I56_EXACT_SHA: d9b767120119ed1fa25fa76d57972ee9862ca72d
           I56_SYNTHETIC_DEBUG: '1'
           I56_FULL_REHEARSAL: '1'
         run: |
