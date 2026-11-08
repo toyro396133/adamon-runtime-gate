@@ -93,7 +93,7 @@ jobs:
             'source_key',s.normalized_key,
             'id',p.id,
             'tenant_id',p."tenantId",
-            'version',p.xmin::text,
+            'version',p."updatedAt"::text,
             'broken',false
           )::text
           FROM import_v2.source_record s
