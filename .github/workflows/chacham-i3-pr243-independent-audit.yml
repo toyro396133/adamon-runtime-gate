@@ -206,7 +206,7 @@ jobs:
           echo "NATIVE_PG_OUTCOME=${{ steps.pg.outcome }}"
           echo "UI_AND_CONNECTION_OUTCOME=${{ steps.ui.outcome }}"
           echo "ACTION_AUTH_AND_VALIDITY_OUTCOME=${{ steps.actions.outcome }}"
-          if [ "___PG_OUTCOME___" != success ] || [ "___UI_OUTCOME___" != success ] || [ "___ACT_OUTCOME___" != success ]; then
+          if [ "${{ steps.pg.outcome }}" != success ] || [ "${{ steps.ui.outcome }}" != success ] || [ "${{ steps.actions.outcome }}" != success ]; then
             echo 'Independent acceptance invariants failed; do not APPLY/merge.'
             exit 1
           fi
