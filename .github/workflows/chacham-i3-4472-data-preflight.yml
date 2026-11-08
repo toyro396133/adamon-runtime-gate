@@ -1,0 +1,64 @@
+name: I3 4472 person semantic preflight read-only
+on:
+  push:
+    branches: [ci/chacham-i3-status-71-20261108]
+    paths: [.github/workflows/chacham-i3-4472-data-preflight.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: i3-semantics-frozen-live-read-only
+  cancel-in-progress: false
+jobs:
+  read-only-source-attestation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      EXPECTED_PRIVATE_SHA: 44a0a18f7b0d1baa3e91c4576cc82769e326fcd4
+    steps:
+      - name: Verify existing private checkout secret
+        shell: bash
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$PRIVATE_READ_TOKEN"
+      - name: Checkout private PR244 exact head (no persisted token)
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 44a0a18f7b0d1baa3e91c4576cc82769e326fcd4
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: private-source
+      - name: Assert exact pinned private code SHA
+        shell: bash
+        run: test "$(git -C private-source rev-parse HEAD)" = "$EXPECTED_PRIVATE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - name: Install frozen private dependencies
+        working-directory: private-source
+        run: pnpm install --frozen-lockfile
+      - name: Verify every plan entry against approved 71-value mapper (offline)
+        working-directory: private-source
+        run: pnpm exec tsx scripts/import-v2/i3_semantic_verify_live.ts --offline
+      - name: Verify every person's live source and CAS against exact isolated Neon, read-only
+        working-directory: private-source
+        env:
+          I3_STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
+        run: pnpm exec tsx scripts/import-v2/i3_semantic_verify_live.ts --live
+      - name: Summarize boundary without private data
+        if: always()
+        shell: bash
+        run: |
+          echo '## I3 source-bound semantic preflight' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Pinned private SHA: '"$EXPECTED_PRIVATE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Data access: read only, exact isolated Neon I3 branch; no SQL writes.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No person/source status rows, credentials, or private plan uploaded.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove private checkout
+        if: always()
+        shell: bash
+        run: rm -rf -- "$GITHUB_WORKSPACE/private-source"
