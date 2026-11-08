@@ -33,7 +33,7 @@ jobs:
           --health-timeout 5s
           --health-retries 8
     env:
-      EXPECTED_SHA: 7366c0f21f25fe8cb74dd75e7c993dac5cca8489
+      EXPECTED_SHA: 728d1266a590f96c87709b91fe92a5f53fb33cb4
       DATABASE_URL: postgresql://postgres:synthetic-i3-only@127.0.0.1:5432/i3_integration
       NEXTAUTH_SECRET: synthetic-integration-only-no-real-users
       AUTH_SECRET: synthetic-integration-only-no-real-users
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 7366c0f21f25fe8cb74dd75e7c993dac5cca8489
+          ref: 728d1266a590f96c87709b91fe92a5f53fb33cb4
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           path: private-source
@@ -73,10 +73,10 @@ jobs:
       - name: Focused action and component synthetic regression tests
         working-directory: private-source
         run: |
-          pnpm exec vitest run src/actions/personActions.operationalStatus.i3.test.ts src/components/import-v2-person-scoped.test.tsx src/actions/personInstitutionalFactsActions.test.ts src/actions/importV2ComputedAffinitiesActions.r243-07.test.ts
+          pnpm exec vitest run src/components/PersonDetailsModal.i3.test.tsx src/actions/personActions.operationalStatus.i3.test.ts src/components/import-v2-person-scoped.test.tsx src/actions/personInstitutionalFactsActions.test.ts src/actions/importV2ComputedAffinitiesActions.r243-07.test.ts
       - name: Targeted ESLint
         working-directory: private-source
-        run: pnpm exec eslint src/actions/personActions.ts src/actions/personActions.operationalStatus.i3.test.ts src/components/PersonDetailsModal.tsx
+        run: pnpm exec eslint src/actions/personActions.ts src/actions/personActions.operationalStatus.i3.test.ts src/components/PersonDetailsModal.tsx src/components/PersonDetailsModal.i3.test.tsx
       - name: Native disposable PostgreSQL schema
         working-directory: private-source
         run: pnpm exec prisma db push --skip-generate
