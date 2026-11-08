@@ -1,0 +1,81 @@
+name: Concept Lab frozen Hebrew semantic retrieval PR20 vs PR22
+on:
+  push:
+    branches: [ci/concept-semantic-retrieval-20261108]
+    paths: [.github/workflows/concept-semantic-retrieval-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  frozen-semantic-search:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check private repository read token
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Missing read token"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 5b5eb234824272837edc5323c1c0cb68ce133902
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr18-encoder-root-protected-continuations
+          run-id: 42429916937
+          github-token: '${{ github.token }}'
+          path: pr20-frozen
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-cross-entity-2600-protected-seed-7-17
+          run-id: 42433021927
+          github-token: '${{ github.token }}'
+          path: pr22-frozen
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU neural evaluation libraries
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Three targeted frozen-evaluation checks
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "5b5eb234824272837edc5323c1c0cb68ce133902"
+          python -m unittest tests.test_semantic_retrieval -v
+      - name: Reconstruct TRAIN-only corpus for unsupervised lexical index
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -m research.neural_units.generate_structure_world --output ../../world-for-search
+          test "$(wc -l < ../../world-for-search/corpus/train.jsonl)" -eq 1800
+      - name: Read-only semantic retrieval on four existing checkpoints
+        working-directory: source/concept-discovery-v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find ../../pr20-frozen -name 'continued-encoder-root-seed-*.pt' | wc -l)" -eq 2
+          test "$(find ../../pr22-frozen -name 'continued-shared-structure-seed-*.pt' | wc -l)" -eq 2
+          python -u -m research.neural_units.evaluate_semantic_retrieval \
+            --pr20 ../../pr20-frozen --pr22 ../../pr22-frozen \
+            --train-world ../../world-for-search \
+            --output results/semantic-retrieval/frozen_semantic_retrieval.json
+          test -s results/semantic-retrieval/frozen_semantic_retrieval.json
+      - name: Compare with genuinely pretrained multilingual embedding baseline when available
+        working-directory: source/concept-discovery-v2
+        timeout-minutes: 15
+        run: |
+          python -m pip install -q sentence-transformers || echo "Optional install unavailable"
+          python -u -m research.neural_units.evaluate_semantic_retrieval \
+            --pretrained-only --output results/semantic-retrieval/frozen_semantic_retrieval.json
+        continue-on-error: true
+      - name: Archive frozen full report and read-only provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-pr20-pr22-frozen-hebrew-semantic-retrieval
+          path: |
+            source/concept-discovery-v2/results/semantic-retrieval/frozen_semantic_retrieval.json
+            world-for-search/manifest.json
+          if-no-files-found: warn
