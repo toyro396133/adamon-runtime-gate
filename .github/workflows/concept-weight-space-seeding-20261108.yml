@@ -1,0 +1,75 @@
+name: Concept Lab PR20 parallel weight-space concept seeding
+on:
+  push:
+    branches: [ci/concept-weight-space-seeding-20261108]
+    paths: [.github/workflows/concept-weight-space-seeding-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  program-copies-of-pr20:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Verify private source token exists without exposing it
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: 'test -n "$TOKEN" || { echo "::error::Missing read token"; exit 1; }'
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 79dee191ac58340b0a23b8e17caace742956e7bf
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr18-encoder-root-protected-continuations
+          run-id: 42429916937
+          github-token: '${{ github.token }}'
+          path: predecessor-PR20
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: predecessor-PR18
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU-only torch and assessment dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Verify pinned source and three narrow safety tests
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "79dee191ac58340b0a23b8e17caace742956e7bf"
+          python -m unittest tests.test_weight_space_concept_seeding -v
+      - name: Verify immutable PR20 checkpoints and evaluation corpus
+        shell: bash
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(find ../../predecessor-PR20 -type f -name 'continued-encoder-root-seed-*.pt' | wc -l)" -eq 2
+          test -s "$(find ../../predecessor-PR18 -type f -path '*/sealed/corpus/test.jsonl' | head -1)"
+          echo "PR20 trained checkpoints and independent corpus verified"
+      - name: Direct program three primitive contrasts on two PR20 checkpoint copies
+        shell: bash
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          file=$(find ../../predecessor-PR18 -type f -path '*/sealed/corpus/test.jsonl' | head -1)
+          sealed=$(dirname "$(dirname "$file")")
+          python -u -m research.neural_units.weight_space_concept_seeding \
+            --checkpoints ../../predecessor-PR20 --sealed "$sealed" \
+            --output results/weight-space-seeding
+          test "$(find results/weight-space-seeding -type f -name 'wsp-*-seed-*.pt' | wc -l)" -eq 4
+          test -s results/weight-space-seeding/weight_space_seeding_report.json
+      - name: Always upload report and isolated checkpoint copies
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concept-pr20-weight-space-seeding-controls
+          path: |
+            source/concept-discovery-v2/results/weight-space-seeding/weight_space_seeding_report.json
+            source/concept-discovery-v2/results/weight-space-seeding/wsp-*-seed-*.pt
+          if-no-files-found: warn
