@@ -1,0 +1,29 @@
+name: I5 I6 5786 planner unit tests
+on:
+  push:
+    branches: ['run/i56-5786-tests-20261108']
+    paths: ['.github/workflows/chacham-i56-5786-unit.yml']
+permissions: {}
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify the existing private checkout secret
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: f3891be498052cca74aa5ea81a64740829752038
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/restore-5786
+            scripts/import-v2/audit_source.py
+          sparse-checkout-cone-mode: false
+      - name: Test the pinned code
+        run: |
+          test "$(git rev-parse HEAD)" = "f3891be498052cca74aa5ea81a64740829752038"
+          python3 -m unittest discover -s scripts/restore-5786 -v
