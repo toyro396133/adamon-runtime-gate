@@ -1,0 +1,99 @@
+name: Chacham Lev I3 post-migration integration (private SHA, synthetic PG)
+
+on:
+  push:
+    branches: [ci/chacham-i3-postmigration-integration-20261108]
+    paths:
+      - '.github/workflows/chacham-i3-postmigration-integration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chacham-i3-postmigration-20261108
+  cancel-in-progress: false
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-i3-only
+          POSTGRES_DB: i3_integration
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d i3_integration"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      EXPECTED_SHA: 7366c0f21f25fe8cb74dd75e7c993dac5cca8489
+      DATABASE_URL: postgresql://postgres:synthetic-i3-only@127.0.0.1:5432/i3_integration
+      NEXTAUTH_SECRET: synthetic-integration-only-no-real-users
+      AUTH_SECRET: synthetic-integration-only-no-real-users
+      NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+      NEXT_TELEMETRY_DISABLED: '1'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Require existing authorized read-only checkout token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 7366c0f21f25fe8cb74dd75e7c993dac5cca8489
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: private-source
+      - name: Pin immutable candidate
+        working-directory: private-source
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: pnpm/action-setup@v4
+        with: { version: 11 }
+      - name: Install project
+        working-directory: private-source
+        run: pnpm install --frozen-lockfile
+      - name: Validate Prisma and generate client
+        working-directory: private-source
+        run: |
+          pnpm exec prisma validate
+          pnpm exec prisma generate
+      - name: TypeScript contract
+        working-directory: private-source
+        run: pnpm exec tsc --noEmit
+      - name: Focused action and component synthetic regression tests
+        working-directory: private-source
+        run: |
+          pnpm exec vitest run src/actions/personActions.operationalStatus.i3.test.ts src/components/import-v2-person-scoped.test.tsx src/actions/personInstitutionalFactsActions.test.ts src/actions/importV2ComputedAffinitiesActions.r243-07.test.ts
+      - name: Targeted ESLint
+        working-directory: private-source
+        run: pnpm exec eslint src/actions/personActions.ts src/actions/personActions.operationalStatus.i3.test.ts src/components/PersonDetailsModal.tsx
+      - name: Native disposable PostgreSQL schema
+        working-directory: private-source
+        run: pnpm exec prisma db push --skip-generate
+      - name: Verify actual disposable PostgreSQL tables
+        env:
+          PGHOST: 127.0.0.1
+          PGUSER: postgres
+          PGPASSWORD: synthetic-i3-only
+          PGDATABASE: i3_integration
+        run: |
+          psql -v ON_ERROR_STOP=1 -Atc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('Person','PersonConnection','PersonInstitutionalAffiliation','AuditLog');" | grep -x 4
+      - name: State evidence boundary
+        if: always()
+        run: |
+          echo "## Isolated I3 post-migration application gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pinned source SHA: $EXPECTED_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Private source, synthetic PG16 data, no live I3/Neon/Production connection" >> "$GITHUB_STEP_SUMMARY"
+      - name: Erase private source
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/private-source"
