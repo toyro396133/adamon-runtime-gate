@@ -1,0 +1,31 @@
+name: Concept Lab stage1 artifact result extraction
+on:
+  push:
+    branches: [ci/concept-layer-diagnosis-20261108]
+    paths: [.github/workflows/concept-layer-results-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  print-frozen-results:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage1-pr20-pr22-layer-diagnosis
+          run-id: 42436585633
+          github-token: '${{ github.token }}'
+          path: result
+      - name: Emit machine-readable full result for research audit
+        shell: bash
+        run: |
+          find result -type f -printf '%p\n'
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=list(Path("result").rglob("frozen_layers.json"))
+          q=list(Path("result").rglob("lexical_controls.json"))
+          assert len(p)==len(q)==1
+          a=json.loads(p[0].read_text(encoding="utf-8"))
+          b=json.loads(q[0].read_text(encoding="utf-8"))
+          print("SEMANTIC_RESULT_JSON="+json.dumps(a,ensure_ascii=False,separators=(",",":")))
+          print("LEXICAL_RESULT_JSON="+json.dumps(b,ensure_ascii=False,separators=(",",":")))
+          PY
