@@ -1,0 +1,123 @@
+name: Concept Lab Stage3A independent artifacts, order counterfactuals and tiny capacity
+on:
+  push:
+    branches: [ci/concept-stage3a-independent-audit-20261108]
+    paths: [.github/workflows/concept-stage3a-independent-audit-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  blind-posthoc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 145
+    steps:
+      - name: Verify GitHub source token exists without disclosure
+        env: {TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'}
+        run: test -n "$TOKEN"
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 9ecbc0ce938a74c0452454ef8bff1dd7e0a5f25d
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - name: Source is the independent new posthoc audit code, not retrained weights
+        run: test "$(git -C source rev-parse HEAD)" = "9ecbc0ce938a74c0452454ef8bff1dd7e0a5f25d"
+      - name: Await both exact pre-existing Stage3A training artifacts
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 45); do
+            count=$(gh api repos/toyro396133/adamon-runtime-gate/actions/runs/42448267315/artifacts --jq '[.artifacts[].name | select(startswith("concept-stage3a-seed-"))] | length')
+            if [ "$count" = "2" ]; then echo "Existing seed7+seed17 artifacts are present"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::Both prior-source Stage3A artifacts did not appear"
+          exit 1
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage3a-seed-7-checkpoints
+          run-id: 42448267315
+          github-token: '${{ github.token }}'
+          path: original-7
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage3a-seed-17-checkpoints
+          run-id: 42448267315
+          github-token: '${{ github.token }}'
+          path: original-17
+      - uses: actions/download-artifact@v4
+        with:
+          name: cross-entity-root-PR16-continuations
+          run-id: 42423323242
+          github-token: '${{ github.token }}'
+          path: historic-train
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-cross-entity-2600-protected-seed-7-17
+          run-id: 42433021927
+          github-token: '${{ github.token }}'
+          path: pr22-frozen
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install original CPU torch dependencies only
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'scikit-learn==1.7.2'
+      - name: Focused independently written and token-balanced-order challenge integrity
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from research.neural_units.stage3a_counterfactual_audit import order_pairs
+          from research.neural_units.stage3a_free_challenge import free_questions
+          from backend.model import WORD
+          from collections import Counter
+          for split in ("test","holdout"):
+              cases=order_pairs(split,12)
+              free=free_questions(split)
+              assert len(cases)==36 and len(free)==8
+              for a,b in cases:
+                  assert Counter(WORD.findall(a["story"]))==Counter(WORD.findall(b["story"]))
+                  assert a["options"]==b["options"] and a["target"]!=b["target"]
+              print(split,"36 reversed-order pairs; 8 freely authored QAs")
+          PY
+      - name: Independent posthoc real-world-order and free-text challenge seed7
+        working-directory: source/concept-discovery-v2
+        run: |
+          mkdir -p stage3a-posthoc
+          python -u -m research.neural_units.evaluate_stage3a_challenges \
+            --seed 7 --checkpoints ../../original-7 \
+            --output stage3a-posthoc/challenges-seed7.json
+      - name: Independent posthoc real-world-order and free-text challenge seed17
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.evaluate_stage3a_challenges \
+            --seed 17 --checkpoints ../../original-17 \
+            --output stage3a-posthoc/challenges-seed17.json
+      - name: Isolated 18-case ability-to-fit diagnostics, both original PR22 seeds
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          prior=$(find ../../historic-train -type f -path '*/dataset/corpus/train.jsonl' | head -1)
+          test -s "$prior"
+          python -u -m research.neural_units.stage3a_tiny_capacity \
+            --seed 7 --checkpoints ../../pr22-frozen --legacy-train "$prior" \
+            --output stage3a-posthoc/tiny7 --epochs 60
+          python -u -m research.neural_units.stage3a_tiny_capacity \
+            --seed 17 --checkpoints ../../pr22-frozen --legacy-train "$prior" \
+            --output stage3a-posthoc/tiny17 --epochs 60
+      - name: Cross-seed forensic audit and two-seed research pass screen
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.audit_stage3a_events \
+            --seed7 ../../original-7 --seed17 ../../original-17 \
+            --output stage3a-posthoc/cross_seed_audit.json
+      - name: Preserve independent forensic evidence and tiny original-derived checkpoints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage3a-independent-posthoc-diagnostics
+          path: source/concept-discovery-v2/stage3a-posthoc/**
+          if-no-files-found: warn
+          retention-days: 90
