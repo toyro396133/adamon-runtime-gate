@@ -1,0 +1,91 @@
+name: Concept Lab Stage2C independent sealed replay and forensic audit
+on:
+  push:
+    branches: [ci/concept-semantic-retention-stage2c-20261108]
+    paths: [.github/workflows/concept-semantic-stage2c-final-audit-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  independent-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Await immutable two-seed training artifact completion
+        env: {GH_TOKEN: '${{ github.token }}'}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 90); do
+            state=$(gh api repos/toyro396133/adamon-runtime-gate/actions/runs/42446251188 --jq .status)
+            if [ "$state" = "completed" ]; then
+              conclusion=$(gh api repos/toyro396133/adamon-runtime-gate/actions/runs/42446251188 --jq .conclusion)
+              if [ "$conclusion" = "success" ]; then
+                echo "Original training/evaluation completed SUCCESS"
+                exit 0
+              fi
+              echo "::error::Original training did not succeed: $conclusion"
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "::error::Timed out awaiting original training"
+          exit 1
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 7fede4b79acaf9e3d35170b4633db65c35c98a78
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2c-seed-7-all-checkpoints
+          run-id: 42446251188
+          github-token: '${{ github.token }}'
+          path: evidence/seed7
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2c-seed-17-all-checkpoints
+          run-id: 42446251188
+          github-token: '${{ github.token }}'
+          path: evidence/seed17
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU tensor and lexical analysis dependencies
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Test corrected sealed Hebrew words and real multiwindow path
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "7fede4b79acaf9e3d35170b4633db65c35c98a78"
+          python -m unittest tests.test_semantic_stage2c -v
+      - name: REPLAY separate post-checkpoint new blind tests and paired local_update
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.evaluate_semantic_stage2c \
+            --seed 7 --checkpoints ../../evidence/seed7 \
+            --output ../../evidence/seed7/independent_evaluation.json
+          python -u -m research.neural_units.evaluate_semantic_stage2c \
+            --seed 17 --checkpoints ../../evidence/seed17 \
+            --output ../../evidence/seed17/independent_evaluation.json
+      - name: Independent tensor-exact six-optimizer and two-seed research audit
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.stage2c_audit_results \
+            --root ../../evidence \
+            --output ../../evidence/stage2c_forensic_summary.json
+          test -s ../../evidence/stage2c_forensic_summary.json
+      - name: Archive FINAL corrected blind reports (checkpoints in source run)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage2c-final-blind-information-retention-and-forensic
+          path: |
+            evidence/seed7/independent_evaluation.json
+            evidence/seed17/independent_evaluation.json
+            evidence/stage2c_forensic_summary.json
+          if-no-files-found: warn
+          retention-days: 90
