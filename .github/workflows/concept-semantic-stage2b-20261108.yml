@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: c8f505c2ebd28ff8f70f970de7dd1465d2da524f
+          ref: 15a97fb87c0edc195082ff069eb488651076ee74
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "c8f505c2ebd28ff8f70f970de7dd1465d2da524f"
+          test "$(git rev-parse HEAD)" = "15a97fb87c0edc195082ff069eb488651076ee74"
           python -m unittest tests.test_semantic_stage2b -v
       - name: Protected A0/A1/A2 training from ORIGINAL PR22 checkpoints
         working-directory: source/concept-discovery-v2
