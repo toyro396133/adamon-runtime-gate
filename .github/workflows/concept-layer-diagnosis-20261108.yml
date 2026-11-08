@@ -1,0 +1,76 @@
+name: Concept Lab frozen layer-resolved semantic diagnosis stage 1
+on:
+  push:
+    branches: [ci/concept-layer-diagnosis-20261108]
+    paths: [.github/workflows/concept-layer-diagnosis-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  frozen-layer-diagnosis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Confirm private checkout token
+        env:
+          TOKEN: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+        run: test -n "$TOKEN" || { echo "::error::Missing private source read token"; exit 1; }
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 73edb06286b5d15c505aab60fa85577b25309faa
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr18-encoder-root-protected-continuations
+          run-id: 42429916937
+          github-token: '${{ github.token }}'
+          path: pr20-original
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-cross-entity-2600-protected-seed-7-17
+          run-id: 42433021927
+          github-token: '${{ github.token }}'
+          path: pr22-original
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-external-weight-program-two-seeds
+          run-id: 42433858341
+          github-token: '${{ github.token }}'
+          path: pr23-programmed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU-only neural diagnosis requirements
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install scikit-learn
+      - name: Focused tests of exact infer_local stages and split isolation
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "73edb06286b5d15c505aab60fa85577b25309faa"
+          python -m unittest tests.test_semantic_layers -v
+          find ../../pr20-original ../../pr22-original ../../pr23-programmed -name '*.pt' -printf '%p\n'
+      - name: Frozen lexical controls (TRAIN-only vocabulary fitting)
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.semantic_layer_lexical_control \
+            --output results/semantic-layer-diagnosis/lexical_controls.json
+      - name: Frozen PR20 versus PR22 four-model layer probes and PR23 reversible gate
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.diagnose_semantic_layers \
+            --pr20 ../../pr20-original --pr22 ../../pr22-original \
+            --pr23 ../../pr23-programmed \
+            --output results/semantic-layer-diagnosis/frozen_layers.json
+          test -s results/semantic-layer-diagnosis/frozen_layers.json
+      - name: Archive numerical reports even on partial failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: concept-stage1-pr20-pr22-layer-diagnosis
+          path: |
+            source/concept-discovery-v2/results/semantic-layer-diagnosis/
+          if-no-files-found: warn
