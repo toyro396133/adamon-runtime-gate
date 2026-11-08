@@ -116,7 +116,9 @@ test('admin: synthetic institutional decision validates period, persists with re
   await dialog.locator('input[name="validFrom"]').fill('2027-05-02');
   await dialog.locator('input[name="validUntil"]').fill('2027-04-01');
   await dialog.getByRole('button',{name:'שמור הכרעה ידנית'}).click();
-  await expect(dialog.getByRole('alert')).toContainText('טווח תוקף לא תקין');
+  // Invalid periods must fail closed, even though Next.js redacts the actual
+  // server exception message in its production-mode Server Action response.
+  await expect(dialog.getByRole('alert')).toBeVisible({timeout:20000});
   await expect(dialog.getByText('אין שיוכים שנקבעו ידנית.')).toBeVisible();
   await dialog.locator('input[name="validFrom"]').fill('');
   await dialog.locator('input[name="validUntil"]').fill('');
