@@ -153,15 +153,32 @@ jobs:
         run: |
           if command -v google-chrome >/dev/null; then
             google-chrome --version
-            cat > .i56-playwright.config.ts <<'EOF'
-          import base from './playwright.config';
-          export default { ...base, use: { ...base.use, channel: 'chrome' } };
+            echo "I56_CHROME_EXECUTABLE=$(command -v google-chrome)" >> "$GITHUB_ENV"
+            cat > .i56-playwright.config.mjs <<'EOF'
+          import { defineConfig } from '@playwright/test';
+          export default defineConfig({
+            testDir: './e2e', workers: 1, timeout: 60000,
+            use: { baseURL: 'http://127.0.0.1:3000',
+              launchOptions: { executablePath: process.env.I56_CHROME_EXECUTABLE,
+                chromiumSandbox: false } },
+          });
           EOF
-            echo 'I56_BROWSER_CONFIG=.i56-playwright.config.ts' >> "$GITHUB_ENV"
+            echo 'I56_BROWSER_CONFIG=.i56-playwright.config.mjs' >> "$GITHUB_ENV"
           else
             ./node_modules/.bin/playwright install --with-deps chromium > "$RUNNER_TEMP/i56-chromium.log" 2>&1 || { tail -30 "$RUNNER_TEMP/i56-chromium.log"; exit 1; }
             echo 'I56_BROWSER_CONFIG=playwright.config.ts' >> "$GITHUB_ENV"
           fi
+      - name: Verify the Playwright runner can launch the browser
+        run: |
+          node --input-type=module <<'EOF'
+          import { chromium } from '@playwright/test';
+          const browser = await chromium.launch({ executablePath: process.env.I56_CHROME_EXECUTABLE,
+            chromiumSandbox: false });
+          const page = await browser.newPage();
+          await page.setContent('<h1>isolated</h1>');
+          if (await page.locator('h1').textContent() !== 'isolated') process.exitCode = 1;
+          await browser.close();
+          EOF
       - name: Create ephemeral test credentials
         run: |
           for name in NEXTAUTH_SECRET AUTH_SECRET E2E_TEST_PASSWORD; do
@@ -219,12 +236,35 @@ jobs:
         id: authorized
         env:
           E2E_BASE_URL: http://127.0.0.1:3000
-        run: ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line --grep 'authenticated archive'
+        run: |
+          ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line --grep 'authenticated archive' > "$RUNNER_TEMP/i56-authorized.log" 2>&1 || { tail -50 "$RUNNER_TEMP/i56-authorized.log"; exit 1; }
       - name: Real login and tenant / role denial
         if: always() && steps.web.outcome == 'success'
         env:
           E2E_BASE_URL: http://127.0.0.1:3000
-        run: ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line --grep-invert 'authenticated archive'
+        run: |
+          ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line --grep-invert 'authenticated archive' > "$RUNNER_TEMP/i56-denied.log" 2>&1 || { tail -50 "$RUNNER_TEMP/i56-denied.log"; exit 1; }
+      - name: Classify browser diagnostics without storing page or credential data
+        if: failure()
+        id: browser_error
+        run: |
+          mode=unclassified
+          logs=("$RUNNER_TEMP/i56-authorized.log" "$RUNNER_TEMP/i56-denied.log" "$RUNNER_TEMP/i56-next.log")
+          if grep -qi 'No tests found' "${logs[@]}" 2>/dev/null; then mode=no-tests; fi
+          if grep -qiE 'Cannot find (module|package)|ERR_MODULE_NOT_FOUND' "${logs[@]}" 2>/dev/null; then mode=module-resolution; fi
+          if grep -qiE 'Executable doesn.t exist|browserType.launch|Missing X server' "${logs[@]}" 2>/dev/null; then mode=browser-launch; fi
+          if grep -qi 'SYNTHETIC_BROWSER_PASSWORD_REQUIRED' "${logs[@]}" 2>/dev/null; then mode=password-env; fi
+          if grep -qi 'waitForURL' "${logs[@]}" 2>/dev/null; then mode=login-timeout; fi
+          if grep -qi 'toHaveCount' "${logs[@]}" 2>/dev/null; then mode=visibility-count; fi
+          if grep -qiE 'playwright.*did not expect test|two different versions of @playwright' "${logs[@]}" 2>/dev/null; then mode=runner-version; fi
+          echo "reason=$mode" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$mode" > "$RUNNER_TEMP/i56-browser-diagnostic.txt"
+      - uses: actions/upload-artifact@v4
+        if: failure() && steps.browser_error.outcome == 'success'
+        with:
+          name: i56-browser-diagnostic-${{ steps.browser_error.outputs.reason }}
+          path: ${{ runner.temp }}/i56-browser-diagnostic.txt
+          retention-days: 1
       - name: Shut down synthetic test server
         if: always()
         run: |
