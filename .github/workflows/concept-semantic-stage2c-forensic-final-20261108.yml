@@ -1,0 +1,65 @@
+name: Concept Lab Stage2C final immutable artifact-only audit
+on:
+  push:
+    branches: [ci/concept-semantic-retention-stage2c-20261108]
+    paths: [.github/workflows/concept-semantic-stage2c-forensic-final-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  forensic-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 0c1b72b4cf629579348fed09a8f8503002441ab2
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2c-seed-7-all-checkpoints
+          run-id: 42446251188
+          github-token: '${{ github.token }}'
+          path: evidence/seed7
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2c-seed-17-all-checkpoints
+          run-id: 42446251188
+          github-token: '${{ github.token }}'
+          path: evidence/seed17
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2c-final-blind-information-retention-and-forensic
+          run-id: 42446748311
+          github-token: '${{ github.token }}'
+          path: corrected
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU PyTorch for checkpoint forensic
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+      - name: Inject corrected sealed evaluations, no training/re-evaluation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s corrected/seed7/independent_evaluation.json
+          test -s corrected/seed17/independent_evaluation.json
+          cp corrected/seed7/independent_evaluation.json evidence/seed7/independent_evaluation.json
+          cp corrected/seed17/independent_evaluation.json evidence/seed17/independent_evaluation.json
+      - name: Verify 14 ORIGINAL checkpoint files and finalize two-seed decision
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "0c1b72b4cf629579348fed09a8f8503002441ab2"
+          python -u -m research.neural_units.stage2c_audit_results \
+            --root ../../evidence \
+            --output ../../evidence/stage2c_forensic_summary.json
+          test -s ../../evidence/stage2c_forensic_summary.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concept-stage2c-independent-final-forensic-summary
+          path: evidence/stage2c_forensic_summary.json
+          if-no-files-found: warn
+          retention-days: 90
