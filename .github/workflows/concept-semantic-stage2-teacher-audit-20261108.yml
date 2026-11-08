@@ -1,0 +1,32 @@
+name: Concept Lab Stage2 TRAIN-only multilingual NLI teacher audit
+on:
+  push:
+    branches: [ci/concept-semantic-gru-stage2-20261108]
+    paths: [.github/workflows/concept-semantic-stage2-teacher-audit-20261108.yml]
+permissions: {contents: read}
+jobs:
+  teacher-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: dc1061cb3b9e55bf11b8266092f050cb313c6d5a
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: CPU audit prerequisites
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers>=4.50,<6' scikit-learn
+      - name: Audit original Hebrew role reversal and exact-matched words on TRAIN development alone
+        working-directory: source/concept-discovery-v2
+        env:
+          HF_HUB_ETAG_TIMEOUT: '15'
+          HF_HUB_DOWNLOAD_TIMEOUT: '45'
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          python -u -m research.neural_units.audit_nli_semantic_teacher
