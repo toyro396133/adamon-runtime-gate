@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 02b27fcdd32f9e791568ce23db2ac9ae599c5588
+          ref: 4acee59168ee5b73e5e84415f93f522b39a3b333
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -46,7 +46,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "02b27fcdd32f9e791568ce23db2ac9ae599c5588"
+          test "$(git rev-parse HEAD)" = "4acee59168ee5b73e5e84415f93f522b39a3b333"
           python -m unittest tests.test_stage3a_events -v
       - name: Original-PR22 four-arm question-answering experiment
         working-directory: source/concept-discovery-v2
