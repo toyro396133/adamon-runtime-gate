@@ -162,18 +162,17 @@ jobs:
             ./node_modules/.bin/playwright install --with-deps chromium > "$RUNNER_TEMP/i56-chromium.log" 2>&1 || { tail -30 "$RUNNER_TEMP/i56-chromium.log"; exit 1; }
             echo 'I56_BROWSER_CONFIG=playwright.config.ts' >> "$GITHUB_ENV"
           fi
-      - name: Verify the archive with real credentials and Chromium
+      - name: Create ephemeral test credentials
+        run: |
+          for name in NEXTAUTH_SECRET AUTH_SECRET E2E_TEST_PASSWORD; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+      - name: Seed only synthetic users and foreign evidence
         env:
           DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
-          NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
-          NEXT_TELEMETRY_DISABLED: '1'
-          E2E_BASE_URL: http://127.0.0.1:3000
         run: |
-          export NEXTAUTH_SECRET="$(openssl rand -hex 32)"
-          export AUTH_SECRET="$NEXTAUTH_SECRET"
-          export E2E_TEST_PASSWORD="$(openssl rand -hex 24)"
-          echo "::add-mask::$NEXTAUTH_SECRET"
-          echo "::add-mask::$E2E_TEST_PASSWORD"
           node --input-type=module <<'EOF'
           import { PrismaClient } from '@prisma/client';
           import bcrypt from 'bcryptjs';
@@ -200,14 +199,33 @@ jobs:
             })}});
           await prisma.$disconnect();
           EOF
+      - name: Start the real Next.js server and warm login
+        id: web
+        env:
+          DATABASE_URL: postgresql://postgres:synthetic-only@127.0.0.1:5432/i56_full
+          NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
           ./node_modules/.bin/next dev -H 127.0.0.1 -p 3000 > "$RUNNER_TEMP/i56-next.log" 2>&1 &
-          server=$!
-          trap 'kill "$server" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 60); do
-            if curl --fail --silent --max-time 20 http://127.0.0.1:3000/login > /dev/null; then break; fi
-            kill -0 "$server" || { tail -60 "$RUNNER_TEMP/i56-next.log"; exit 1; }
+          echo $! > "$RUNNER_TEMP/i56-next.pid"
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent --max-time 15 http://127.0.0.1:3000/login > /dev/null; then exit 0; fi
+            kill -0 "$(cat "$RUNNER_TEMP/i56-next.pid")" || break
             sleep 2
           done
-          ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line || {
-            tail -80 "$RUNNER_TEMP/i56-next.log"; exit 1;
-          }
+          tail -30 "$RUNNER_TEMP/i56-next.log"
+          exit 1
+      - name: Real login and archive event visibility
+        id: authorized
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line --grep 'authenticated archive'
+      - name: Real login and tenant / role denial
+        if: always() && steps.web.outcome == 'success'
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: ./node_modules/.bin/playwright test e2e/import-v2-i56.spec.ts --config "$I56_BROWSER_CONFIG" --retries=0 --reporter=line --grep-invert 'authenticated archive'
+      - name: Shut down synthetic test server
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/i56-next.pid"; then kill "$(cat "$RUNNER_TEMP/i56-next.pid")" || true; fi
