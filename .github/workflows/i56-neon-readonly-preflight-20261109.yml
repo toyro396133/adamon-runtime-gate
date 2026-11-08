@@ -91,15 +91,16 @@ jobs:
           cat > "$work/crosswalk.sql" <<'SQL'
           SELECT jsonb_build_object(
             'source_key',s.normalized_key,
-            'id',c.target_id,
-            'tenant_id',CASE WHEN c.target_id IS NULL THEN NULL ELSE :'tenant' END,
-            'version',CASE WHEN c.target_id IS NULL THEN NULL ELSE '1' END,
+            'id',p.id,
+            'tenant_id',p."tenantId",
+            'version',p.xmin::text,
             'broken',false
           )::text
           FROM import_v2.source_record s
           LEFT JOIN import_v2.canonical_result c
             ON c.source_table=s.source_table AND c.row_no=s.row_no
             AND c.target_table='Person'
+          LEFT JOIN public."Person" p ON p.id=c.target_id AND p."tenantId"=c.tenant_id
           WHERE s.batch_id='I3-IDENTITY-20261027-01' AND s.source_table='תורמים'
           ORDER BY s.row_no;
           SQL
