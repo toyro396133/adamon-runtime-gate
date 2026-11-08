@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 5b7533f9b527467f2f57a00bcc9a232d2545f1f6
+          ref: 5fcffa913659288fd22bf451e9f0408db377f526
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -42,7 +42,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "5b7533f9b527467f2f57a00bcc9a232d2545f1f6"
+          test "$(git rev-parse HEAD)" = "5fcffa913659288fd22bf451e9f0408db377f526"
           python -m unittest tests.test_semantic_stage2 -v
       - name: Continue same GRU with A0 / A1 / B from PR22 exact checkpoints
         working-directory: source/concept-discovery-v2
