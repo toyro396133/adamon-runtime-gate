@@ -1,0 +1,77 @@
+name: I3 independent schema and recovery approval gate (read-only)
+on:
+  push:
+    branches: [ci/chacham-i3-status-71-20261108]
+    paths: [.github/workflows/chacham-i3-schema-migrations-preflight.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: i3-schema-recovery-approval-no-write
+  cancel-in-progress: false
+jobs:
+  schema-migrations-preflight:
+    name: Schema immutable files, Prisma, actual I3 state
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact private PR244 branch HEAD without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 43f0ff1e6235af7e3a4a4fbc8de6f050c58f7fd7
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: private-source
+      - name: Verify exact source revision and scripts parse
+        shell: bash
+        run: |
+          test "$(git -C private-source rev-parse HEAD)" = '43f0ff1e6235af7e3a4a4fbc8de6f050c58f7fd7'
+          bash -n private-source/scripts/import-v2/i3_schema_migrations_preflight.sh
+          bash -n private-source/scripts/import-v2/i3_schema_migrations_postflight.sh
+          bash -n private-source/scripts/import-v2/i3_post_import_recovery_protection_gate.sh
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: private-source/pnpm-lock.yaml
+      - name: Install pinned schema dependencies
+        working-directory: private-source
+        run: pnpm install --frozen-lockfile
+      - name: Validate Prisma schema
+        working-directory: private-source
+        env:
+          DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
+        run: pnpm exec prisma validate --schema prisma/schema.prisma
+      - name: Verify no target mutations and precisely two pending migrations
+        working-directory: private-source
+        env:
+          I3_STAGING_DATABASE_URL: ${{ secrets.I3_STAGING_DATABASE_URL }}
+        run: bash scripts/import-v2/i3_schema_migrations_preflight.sh
+      - name: Remove checkout
+        if: always()
+        run: rm -rf private-source
+  protected-post-import-checkpoint:
+    name: Fail closed unless new post-I3 checkpoint is protected
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Checkout immutable recovery metadata verifier
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 43f0ff1e6235af7e3a4a4fbc8de6f050c58f7fd7
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          path: private-source
+      - name: Check Neon checkpoint protection without changing branches
+        working-directory: private-source
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+        run: bash scripts/import-v2/i3_post_import_recovery_protection_gate.sh
+      - name: Remove checkout
+        if: always()
+        run: rm -rf private-source
