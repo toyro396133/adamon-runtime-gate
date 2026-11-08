@@ -131,13 +131,21 @@ jobs:
           echo 'LOCAL_NEXTJS_UNAVAILABLE'
           tail -n 40 "$RUNNER_TEMP/next-e2e.log" | sed -E 's/(password|secret|token)[^ ]*/[REDACTED]/gi'
           exit 15
-      - name: Real NextAuth and Chromium I3 import auth, tenant, quarantine browser acceptance
-        working-directory: integrated
-        run: pnpm exec playwright test e2e/import-v2-i3.spec.ts --reporter=line --retries=0
-      - name: Real NextAuth and Chromium people/relationship management smoke tests
+      - name: Checkout public regression harness at immutable test SHA
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/adamon-runtime-gate
+          ref: 8049b4a33b85583543e4f19813e49006c7347d10
+          persist-credentials: false
+          path: runner-tests
+      - name: Copy synthetic browser tests only into disposable private checkout
+        run: |
+          cp runner-tests/.github/test-fixtures/i3-semantic-browser.spec.ts integrated/e2e/import-v2-i3-integrated-semantic.spec.ts
+          test -f integrated/e2e/import-v2-i3-integrated-semantic.spec.ts
+      - name: Real NextAuth + Chromium source evidence and canonical people integration
         working-directory: integrated
         run: |
-          pnpm exec playwright test e2e/mobile-system.spec.ts --grep 'tenant|person|permission' --reporter=line --retries=0
+          pnpm exec playwright test e2e/import-v2-i3.spec.ts e2e/import-v2-i3-integrated-semantic.spec.ts --reporter=line --retries=0
       - name: Final isolated provenance
         if: always()
         shell: bash
@@ -154,5 +162,5 @@ jobs:
         shell: bash
         run: |
           if [ -f "$RUNNER_TEMP/next-e2e.pid" ]; then kill "$(cat "$RUNNER_TEMP/next-e2e.pid")" || true; fi
-          rm -rf -- "$GITHUB_WORKSPACE/integrated"
+          rm -rf -- "$GITHUB_WORKSPACE/integrated" "$GITHUB_WORKSPACE/runner-tests"
           rm -f -- "$RUNNER_TEMP/next-e2e.log" "$RUNNER_TEMP/next-e2e.pid"
