@@ -1,0 +1,66 @@
+name: Concept Lab external weight-space program
+on:
+  push:
+    branches: [ci/concept-external-weight-program-20261108]
+    paths: [.github/workflows/concept-external-weight-program-20261108.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  external-weight-program:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: 0bfb959f2aa209c86f3d16be15445d41cdaeff16
+          token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
+          persist-credentials: false
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr18-encoder-root-protected-continuations
+          run-id: 42429916937
+          github-token: '${{ github.token }}'
+          path: original
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr20-weight-space-seeding-counterbalanced
+          run-id: 42432666802
+          github-token: '${{ github.token }}'
+          path: previous
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyTorch CPU
+        run: python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify source and run predeclared causal probes
+        working-directory: source/concept-discovery-v2
+        run: |
+          test "$(git rev-parse HEAD)" = 0bfb959f2aa209c86f3d16be15445d41cdaeff16
+          echo 'adbdf1c7ff53e22281a15c17c923121523c52d73f1c0a2245d7c86983a10e095  research/neural_units/EXTERNAL_WEIGHT_PROGRAM_STATIC_HE.md' | sha256sum -c
+          echo '2b418830b63556931b6758bc3ef0221edf583f3b0c22e60b9f3511ca90dd5dda  research/neural_units/external_weight_program.py' | sha256sum -c
+          mkdir -p ../../results
+          python -m research.neural_units.probe_external_weight_program ../../original ../../results/stage-b.json
+      - name: Write isolated checkpoint copies and matched controls
+        working-directory: source/concept-discovery-v2
+        run: |
+          for seed in 7 17; do
+            for arm in programmed matched; do
+              python -m research.neural_units.external_weight_program \
+                "../../original/continued-encoder-root-seed-$seed.pt" \
+                "../../results/$arm-$seed.pt" "../../results/$arm-$seed.json" \
+                --seed "$seed" --condition "$arm"
+            done
+          done
+      - name: Evaluate four frozen arms and run equal-budget guarded continuation
+        working-directory: source/concept-discovery-v2
+        run: |
+          python -u -m research.neural_units.evaluate_external_weight_program \
+            --source ../../original --previous ../../previous --output ../../results
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concept-external-weight-program-two-seeds
+          path: results/
+          if-no-files-found: error
