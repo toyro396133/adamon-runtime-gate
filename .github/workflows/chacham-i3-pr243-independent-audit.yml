@@ -22,7 +22,7 @@ jobs:
           --health-cmd "pg_isready -U reviewer -d audit243"
           --health-interval 10s --health-timeout 5s --health-retries 8
     env:
-      CANDIDATE_SHA: 20b46c2412e96a66949d77f8b4c5e640c1bcc24e
+      CANDIDATE_SHA: 0faf858af25b5517e6c70ed87fc6d9abc6a087ff
       DATABASE_URL: postgresql://reviewer:reviewer_local_only@127.0.0.1:5432/audit243
       AUTH_SECRET: review-local-only-secret
       NEXTAUTH_SECRET: review-local-only-secret
@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
-          ref: 20b46c2412e96a66949d77f8b4c5e640c1bcc24e
+          ref: 0faf858af25b5517e6c70ed87fc6d9abc6a087ff
           token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 0
@@ -59,13 +59,13 @@ jobs:
       - name: Focused R243 regression unit and jsdom tests
         working-directory: source
         run: |
-          pnpm exec vitest run src/lib/person-institutional-affiliation.test.ts src/lib/import-v2-connection-review-plan.test.ts src/lib/import-v2-derived-affinities.test.ts src/lib/import-v2-pr243-query-connection.test.ts src/lib/import-v2-legacy-status.test.ts src/lib/import-v2-status-review-plan.test.ts src/actions/personInstitutionalFactsActions.test.ts src/components/import-v2-person-scoped.test.tsx src/actions/importV2LegacyStatusReviewActions.test.ts src/services/I3EducationCorrectionService.test.ts --reporter=verbose
+          pnpm exec vitest run src/lib/person-institutional-affiliation.test.ts src/lib/import-v2-connection-review-plan.test.ts src/lib/import-v2-derived-affinities.test.ts src/lib/import-v2-pr243-query-connection.test.ts src/lib/import-v2-legacy-status.test.ts src/lib/import-v2-status-review-plan.test.ts src/actions/personInstitutionalFactsActions.test.ts src/components/import-v2-person-scoped.test.tsx src/actions/importV2LegacyStatusReviewActions.test.ts src/services/I3EducationCorrectionService.test.ts src/lib/import-v2-derived-affinities-r243-07.test.ts src/actions/importV2ComputedAffinitiesActions.r243-07.test.ts src/components/ComputedInstitutionalLinks.r243-07.test.tsx --reporter=verbose
       - name: TypeScript integration
         working-directory: source
         run: pnpm exec tsc --noEmit
       - name: Focused ESLint on changed functional files
         working-directory: source
-        run: pnpm exec eslint src/lib/person-institutional-affiliation.ts src/lib/person-connection-view.ts src/lib/import-v2-connection-review-plan.ts src/lib/import-v2-derived-affinities.ts src/lib/people-query.ts src/actions/personInstitutionalFactsActions.ts src/services/I3EducationCorrectionService.ts src/hooks/usePersonScopedResult.ts src/components/LegacyStatusReviewTab.tsx src/components/ComputedInstitutionalLinks.tsx src/components/PersonInstitutionalFactsTab.tsx src/components/people/PeopleToolbar.tsx src/components/people/FiltersDrawer.tsx
+        run: pnpm exec eslint src/lib/person-institutional-affiliation.ts src/lib/person-connection-view.ts src/lib/import-v2-connection-review-plan.ts src/lib/import-v2-derived-affinities.ts src/lib/people-query.ts src/actions/personInstitutionalFactsActions.ts src/services/I3EducationCorrectionService.ts src/hooks/usePersonScopedResult.ts src/components/LegacyStatusReviewTab.tsx src/components/ComputedInstitutionalLinks.tsx src/components/PersonInstitutionalFactsTab.tsx src/components/people/PeopleToolbar.tsx src/components/people/FiltersDrawer.tsx src/actions/importV2ComputedAffinitiesActions.ts
       - name: Build full pre-S3 baseline from actual main schema
         working-directory: source
         shell: bash
