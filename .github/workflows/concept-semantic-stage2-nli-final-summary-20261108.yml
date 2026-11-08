@@ -1,0 +1,77 @@
+name: Concept Lab Stage2 NLI final integrity and metric summary
+on:
+  push:
+    branches: [ci/concept-semantic-gru-stage2-20261108]
+    paths: [.github/workflows/concept-semantic-stage2-nli-final-summary-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage2-nli-fresh-blind-seeds-7-17
+          run-id: 42440617196
+          github-token: '${{ github.token }}'
+          path: stage2
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install CPU PyTorch only for exact neural tensor state comparison
+        run: python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify real NLI B gradient effect, frozen weights, lexical controls and gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import torch
+          from pathlib import Path
+          root=Path("stage2")
+          t=json.loads(next(root.rglob("training.json")).read_text())
+          e=json.loads(next(root.rglob("independent_evaluation.json")).read_text())
+          print("NLI_FINAL_AUDIT",json.dumps(t["teacher_audit"],ensure_ascii=False))
+          print("NLI_SIGNAL_ACTIVE",t["teacher_signal_active"])
+          print("FRESH_EVAL",e["fresh_blind_followup"],e["previously_exposed_test_and_holdout_never_loaded"])
+          models={}
+          for seed in (7,17):
+            for arm in ("A0","A1","B"):
+              k=f"{arm}_seed{seed}";v=t["results"][k]
+              path=next(root.rglob(v["checkpoint"]))
+              z=torch.load(path,map_location="cpu",weights_only=True)
+              models[k]=z["model"]
+              print("GUARD",json.dumps({"key":k,"accepted":v["accepted"],
+                  "rolled_back":v["rolled_back"],"selected_step":v["selected_step"],
+                  "last_gate":v["milestone_history"][-1]["gates"] if v["milestone_history"] else None,
+                  "selected":next((h["gates"] for h in v["milestone_history"] if h["step"]==v["selected_step"]),None),
+                  "six_optimizers":v["all_six_optimizer_states_reloaded"],
+                  "physical":v["physical_units"],"experience_records":v["experience_records"],
+                  "checkpoint_sha256":v["checkpoint_sha256"]},ensure_ascii=False))
+          for seed in (7,17):
+            a=models[f"A1_seed{seed}"];b=models[f"B_seed{seed}"];base=models[f"A0_seed{seed}"]
+            keys=sorted(set(a)&set(b))
+            changed=[k for k in keys if not torch.equal(a[k],b[k])]
+            b_modified=[k for k in keys if not torch.equal(base[k],b[k])]
+            diff=sum(float((a[k].float()-b[k].float()).square().sum()) for k in changed)**.5
+            lang=lambda name:name.startswith(("embed.","position.","words."))
+            print("WEIGHTS",json.dumps({"seed":seed,"A1_vs_B_different_tensors":len(changed),
+               "A1_vs_B_different_language":sum(map(lang,changed)),
+               "A1_vs_B_nonlanguage_differences":[k for k in changed if not lang(k)],
+               "A1_vs_B_L2":diff,"B_vs_A0_changed_tensors":len(b_modified),
+               "B_vs_A0_frozen_unchanged":not any(not lang(k) for k in b_modified)}))
+          for split in ("test","holdout"):
+            for analyzer in ("word","char"):
+              q=e["baseline_lexical"][split][analyzer+"_balanced_tfidf"]
+              print("LEXICAL",json.dumps({"split":split,"analyzer":analyzer,
+                "cosine":q["cosine"]["all"]["accuracy"],
+                "learned":q["small_supervised"]["all"]["accuracy"]}))
+            for seed in (7,17):
+              for arm in ("A0","A1","B"):
+                k=f"{arm}_seed{seed}"
+                q=e["models"][k][split]["exact_word_multiset_balanced"]
+                print("TEST",json.dumps({"split":split,"key":k,
+                    **{metric:q[metric]["all"]["accuracy"] for metric in
+                      ("gru_native_cosine","gru_frozen_linear_decoder",
+                       "actual_infer_local_cosine","local_frozen_linear_decoder")}}))
+          print("SUCCESS_STAGE2_NLI_SUMMARY")
+          PY
