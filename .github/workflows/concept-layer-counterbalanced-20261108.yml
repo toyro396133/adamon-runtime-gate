@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 243cb7c020f2fa80ff2ea69e194f1919cc729978
+          ref: 60df75d948dada04ae51c6dc8714c16c48791322
           token: '${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}'
           persist-credentials: false
           path: source
@@ -42,7 +42,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "243cb7c020f2fa80ff2ea69e194f1919cc729978"
+          test "$(git rev-parse HEAD)" = "60df75d948dada04ae51c6dc8714c16c48791322"
           python -m unittest tests.test_counterbalanced_semantics -v
           python -u -m research.neural_units.evaluate_counterbalanced_semantics \
             --pr20 ../../pr20-original --pr22 ../../pr22-original \
