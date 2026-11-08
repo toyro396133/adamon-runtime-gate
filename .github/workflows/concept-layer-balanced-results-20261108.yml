@@ -1,0 +1,32 @@
+name: Concept Lab stage1 counterbalanced results extraction
+on:
+  push:
+    branches: [ci/concept-layer-diagnosis-20261108]
+    paths: [.github/workflows/concept-layer-balanced-results-20261108.yml]
+permissions: {contents: read, actions: read}
+jobs:
+  summarize-balanced:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-stage1-counterbalanced-semantic-probes
+          run-id: 42437365670
+          github-token: '${{ github.token }}'
+          path: results
+      - name: Print verified compact reports
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          f=list(Path('results').rglob('counterbalanced_semantics.json'))
+          assert len(f)==1
+          d=json.loads(f[0].read_text(encoding='utf8'))
+          final={'train':d['train'],'test':d['test'],'lexical':d['lexical'],
+                 'models':{key:{'summary':v['summary'],'slot_rescue':v['slot_rescue'],
+                     'families':{name:{stage:v['per_family'][name+':'+stage] for stage in
+                       ('gru_tokens','discovery_mean','local_update_mean','with_bank')}
+                       for name in ('identity','direction','property','action','transition','transfer')}}
+                       for key,v in d['models'].items()}}
+          print('BALANCED_RESULT_JSON='+json.dumps(final,ensure_ascii=False,separators=(',',':')))
+          PY
