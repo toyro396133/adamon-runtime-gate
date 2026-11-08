@@ -1,0 +1,41 @@
+name: Concept Lab semantic retrieval report-only audit
+on:
+  push:
+    branches: [ci/concept-semantic-retrieval-20261108]
+    paths: [.github/workflows/concept-semantic-report-audit-20261108.yml]
+  workflow_dispatch:
+permissions: {contents: read, actions: read}
+jobs:
+  read-frozen-report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: concept-pr20-pr22-frozen-hebrew-semantic-retrieval
+          run-id: 42434175693
+          github-token: '${{ github.token }}'
+          path: previous-report
+      - name: Inspect frozen JSON, print per-category measurements
+        shell: bash
+        run: |
+          set -euo pipefail
+          file=$(find previous-report -type f -name frozen_semantic_retrieval.json | head -1)
+          test -s "$file"
+          python - "$file" <<'PY'
+          import json, sys
+          j=json.load(open(sys.argv[1],encoding="utf8"))
+          print("DATASET",j["query_count"],j["benchmark_sha256"])
+          for key,z in j["external_lexical"].items():
+              print("LEXICAL",key,json.dumps({k:{"top1":v["top1_correct"],"n":v["n"],"hard":v["hard_negative_correct"],"margin":v["average_best_negative_margin"],"wilson95":v["top1_wilson95"]} for k,v in z.items()}))
+          print("PRETRAINED_STATUS",j.get("pretrained_baseline_status"))
+          z=j.get("external_pretrained_multilingual_e5_small")
+          if z is not None:
+              print("PRETRAINED_E5",json.dumps({k:{"top1":v["top1_correct"],"n":v["n"],"hard":v["hard_negative_correct"],"margin":v["average_best_negative_margin"],"wilson95":v["top1_wilson95"]} for k,v in z.items()}))
+          for seed,models in j["neural"].items():
+              for model,paths in models.items():
+                  for path,measures in paths.items():
+                      if path=="source_sha256":continue
+                      print("NEURAL",seed,model,path,json.dumps({k:{"top1":v["top1_correct"],"n":v["n"],"hard":v["hard_negative_correct"],"margin":v["average_best_negative_margin"],"wilson95":v["top1_wilson95"]} for k,v in measures.items()}))
+          print("PROVENANCE_READONLY",j["no_weights_or_optimizer_modified"])
+          PY
