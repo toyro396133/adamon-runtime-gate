@@ -1,0 +1,215 @@
+name: Chacham Lev PR243 independent audit (no I3 writes)
+on:
+  push:
+    branches: [ci/chacham-i3-status-71-20261108]
+    paths: [.github/workflows/chacham-i3-pr243-independent-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: reviewer
+          POSTGRES_PASSWORD: reviewer_local_only
+          POSTGRES_DB: audit243
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reviewer -d audit243"
+          --health-interval 10s --health-timeout 5s --health-retries 8
+    env:
+      CANDIDATE_SHA: 988e49fb5349fa93e7c2607c4dab285833712515
+      DATABASE_URL: postgresql://reviewer:reviewer_local_only@127.0.0.1:5432/audit243
+      AUTH_SECRET: review-local-only-secret
+      NEXTAUTH_SECRET: review-local-only-secret
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - name: Checkout exact private source at pinned SHA
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: 988e49fb5349fa93e7c2607c4dab285833712515
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: source
+      - name: Assert exact SHA
+        working-directory: source
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - name: Install pinned dependencies and Prisma client
+        working-directory: source
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec prisma generate
+      - name: Native PostgreSQL migration and integrity probes (ephemeral database)
+        id: pg
+        continue-on-error: true
+        working-directory: source
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+          import fs from 'node:fs';
+          const client=new pg.Client({connectionString:process.env.DATABASE_URL});
+          const failures=[]; const results=[];
+          await client.connect();
+          try {
+            await client.query('CREATE TABLE "Tenant" ("id" TEXT PRIMARY KEY)');
+            await client.query('CREATE TABLE "Person" ("id" TEXT PRIMARY KEY, "tenantId" TEXT NOT NULL REFERENCES "Tenant"("id"))');
+            await client.query('INSERT INTO "Tenant"("id") VALUES (\'t1\'),(\'t2\')');
+            await client.query('INSERT INTO "Person"("id","tenantId") VALUES (\'p1\',\'t1\'),(\'p2\',\'t2\')');
+            await client.query(fs.readFileSync('prisma/migrations/20261108043000_person_institutional_affiliation/migration.sql','utf8'));
+            results.push('PASS Native PostgreSQL 16 CREATE migration on minimal pre-existing Tenant/Person');
+            const sql='INSERT INTO "PersonInstitutionalAffiliation"("id","tenantId","personId","kind","role","source","rationale","validFrom","decidedById","updatedAt") VALUES ($1,$2,$3,$4,$5,\'verified\',\'reviewed\',$6,\'operator\',NOW())';
+            await client.query(sql,['good','t1','p1','AVRECH','GENERAL',new Date('2026-11-08')]);
+            await client.query('BEGIN');await client.query('SAVEPOINT mismatch');
+            try {
+              await client.query(sql,['wrong-tenant','t2','p1','STAFF','GENERAL',new Date('2026-11-08')]);
+              failures.push('HIGH tenant FK: wrong tenantId t2 + Person p1 in t1 was INSERTABLE');
+            } catch(e) {
+              if(e.code==='23503') results.push('PASS Composite tenant/person FK enforced');
+              else failures.push('Unexpected tenant check error '+e.code);
+            }
+            await client.query('ROLLBACK TO SAVEPOINT mismatch');await client.query('COMMIT');
+            await client.query('BEGIN');await client.query('SAVEPOINT duplicate');
+            try{
+              await client.query(sql,['duplicate','t1','p1','AVRECH','GENERAL',new Date('2026-11-08')]);
+              failures.push('HIGH duplicate active institution fact accepted');
+            }catch(e){if(e.code==='23505')results.push('PASS Duplicate active kind/role rejected');else failures.push('Unexpected duplicate check error '+e.code)}
+            await client.query('ROLLBACK TO SAVEPOINT duplicate');await client.query('COMMIT');
+            await client.query(sql,['future','t1','p1','STAFF','GENERAL',new Date('2030-01-01')]);
+            await client.query('BEGIN');await client.query('SAVEPOINT futureend');
+            try{
+              await client.query('UPDATE "PersonInstitutionalAffiliation" SET "isActive"=false,"validUntil"="validFrom" WHERE "id"=\'future\'');
+              results.push('PASS Ending future fact permits equality');
+            }catch(e){
+              if(e.code==='23514')failures.push('HIGH future scheduled fact cannot end: application validUntil=validFrom violates dates CHECK');
+              else failures.push('Unexpected future-end SQL error '+e.code);
+            }
+            await client.query('ROLLBACK TO SAVEPOINT futureend');await client.query('COMMIT');
+          }finally{await client.end();}
+          for(const x of results)console.log(x);
+          for(const x of failures)console.log('AUDIT FINDING: '+x);
+          console.log('Native PG audit issues: '+failures.length);
+          if(failures.length)process.exitCode=1;
+          NODE
+      - name: Independent connection and person-modal UI tests (runtime)
+        id: ui
+        continue-on-error: true
+        working-directory: source
+        shell: bash
+        run: |
+          cat > src/lib/__independent_pr243_audit.test.tsx <<'TEST'
+          // @vitest-environment jsdom
+          import {describe,expect,it,vi,afterEach} from 'vitest';
+          import React from 'react';
+          import {render,screen,waitFor,cleanup} from '@testing-library/react';
+          import {personConnectionViews} from './person-connection-view';
+          import {planLegacySourceConnections} from './import-v2-connection-review-plan';
+          import {buildPeopleWhere} from './people-query';
+          const {readMock}=vi.hoisted(()=>({readMock:vi.fn()}));
+          vi.mock('@/actions/importV2LegacyStatusReviewActions',()=>({getPersonLegacyStatusReviewAction:readMock}));
+          import {LegacyStatusReviewTab} from '@/components/LegacyStatusReviewTab';
+          afterEach(()=>{cleanup();vi.clearAllMocks()});
+          describe('Independent PR243 boundary regression checks',()=>{
+            it('code 50 great-grandchild reverse endpoint is accurately typed',()=>{
+              const c={id:'e50',fromPersonId:'elder',toPersonId:'younger',
+                connectionType:'GREAT_GRANDPARENT',connectionRole:'SOURCE:GREAT_GRANDPARENT',
+                fromPerson:{id:'elder'},toPerson:{id:'younger'}};
+              const v=personConnectionViews('younger',[c])[0];
+              expect(v.isAmbiguous).toBe(false);
+              expect(v.relationType).toBe('GREAT_GRANDCHILD');
+            });
+            it('does not display a previous person raw Active record while another person loads',async()=>{
+              readMock.mockImplementation((id:string)=>id==='a'
+                ? Promise.resolve({sourceKey:'a1',sourceRow:1,sourceReviewStatus:'historical',
+                  raw:'PRIVATE_PREVIOUS_SOURCE_A',segments:[],proposed:[],issues:[]})
+                : new Promise(()=>{}));
+              const view=render(React.createElement(LegacyStatusReviewTab,{personId:'a'}));
+              await waitFor(()=>expect(screen.queryByText('PRIVATE_PREVIOUS_SOURCE_A')).not.toBeNull());
+              view.rerender(React.createElement(LegacyStatusReviewTab,{personId:'b'}));
+              expect(screen.queryByText('PRIVATE_PREVIOUS_SOURCE_A')).toBeNull();
+            });
+            it('relation candidate plan must identify repeated semantic edge across two source IDs',()=>{
+              const crosswalk=[{sourceKey:'a',personId:'a',tenantId:'t',verified:true},{sourceKey:'b',personId:'b',tenantId:'t',verified:true}];
+              const e={sourceFromKey:'a',sourceToKey:'b',sourceRelationCode:48,sourceIsActive:true};
+              const out=planLegacySourceConnections({tenantId:'t',crosswalk,edges:[{...e,sourceEdgeId:'1'},{...e,sourceEdgeId:'2'}]});
+              expect(out[1].disposition).toBe('BLOCKED');
+            });
+            it('verified staff listing should not also accept unverified Person.type legacy path',()=>{
+              const where=buildPeopleWhere({tenantId:'t',tab:'YESHIVA'});
+              const val=JSON.stringify(where);
+              expect(val).not.toContain('"type":{"in":["STAFF","YESHIVA","RABBI"]}');
+            });
+          });
+          TEST
+          pnpm exec vitest run src/lib/__independent_pr243_audit.test.tsx --reporter=verbose
+      - name: Independent fact authorization and scheduled-ending tests (runtime)
+        id: actions
+        continue-on-error: true
+        working-directory: source
+        shell: bash
+        run: |
+          cat > src/actions/__independent_pr243_actions.test.ts <<'TEST'
+          import {describe,it,expect,vi,beforeEach} from 'vitest';
+          const v=vi.hoisted(()=>({auth:vi.fn(),person:vi.fn(),getFacts:vi.fn(),getAudit:vi.fn(),
+            getFact:vi.fn(),updateFact:vi.fn(),newAudit:vi.fn()}));
+          vi.mock('@/lib/auth-utils',()=>({verifyAuthToken:v.auth}));
+          vi.mock('@/lib/prisma',()=>({prisma:{
+            person:{findUnique:v.person},
+            personInstitutionalAffiliation:{findMany:v.getFacts},
+            auditLog:{findMany:v.getAudit},
+            $transaction:async(cb:any)=>cb({
+              personInstitutionalAffiliation:{findFirst:v.getFact,update:v.updateFact},
+              auditLog:{create:v.newAudit},
+            }),
+          }}));
+          import {getPersonInstitutionalFactsAction,endPersonInstitutionalFactAction} from './personInstitutionalFactsActions';
+          beforeEach(()=>{
+            vi.clearAllMocks();v.person.mockResolvedValue({id:'p1',tenantId:'t'});
+            v.getFacts.mockResolvedValue([{id:'f1',personId:'p1',tenantId:'t',kind:'AVRECH',role:'GENERAL',isActive:true,validFrom:null,validUntil:null}]);
+            v.getAudit.mockResolvedValue([{id:'a1',recordId:'f1',action:'ASSERTED',changes:'private decision audit',userId:'operator',createdAt:new Date()}]);
+            v.getFact.mockResolvedValue({id:'f1',personId:'p1',tenantId:'t',kind:'STAFF',role:'GENERAL',isActive:true,validFrom:new Date('2030-01-01'),validUntil:null});
+            v.newAudit.mockResolvedValue({id:'a2'});v.updateFact.mockResolvedValue({id:'f1'});
+          });
+          describe('Independent PR243 action security gates',()=>{
+            it('VIEW_PEOPLE actor does not receive raw AuditLog events without VIEW_AUDIT_LOGS',async()=>{
+              v.auth.mockResolvedValue({id:'viewer',role:'VIEWER',tenantId:'t'});
+              const result=await getPersonInstitutionalFactsAction('p1');
+              expect(result.events).toEqual([]);
+            });
+            it('ending future effective assignment must not set validUntil equal validFrom',async()=>{
+              v.auth.mockResolvedValue({id:'admin',role:'ADMIN',tenantId:'t'});
+              await endPersonInstitutionalFactAction({personId:'p1',factId:'f1',rationale:'retracted'});
+              const args=v.updateFact.mock.calls[0][0];
+              expect(args.data.validUntil===null || args.data.validUntil>new Date('2030-01-01')).toBe(true);
+            });
+          });
+          TEST
+          pnpm exec vitest run src/actions/__independent_pr243_actions.test.ts --reporter=verbose
+      - name: Report independent audit step results
+        if: always()
+        shell: bash
+        run: |
+          echo "PINNED_SHA=$CANDIDATE_SHA"
+          echo "NATIVE_PG_OUTCOME=${{ steps.pg.outcome }}"
+          echo "UI_AND_CONNECTION_OUTCOME=${{ steps.ui.outcome }}"
+          echo "ACTION_AUTH_AND_VALIDITY_OUTCOME=${{ steps.actions.outcome }}"
+          if [ "___PG_OUTCOME___" != success ] || [ "___UI_OUTCOME___" != success ] || [ "___ACT_OUTCOME___" != success ]; then
+            echo 'Independent acceptance invariants failed; do not APPLY/merge.'
+            exit 1
+          fi
+      - name: Erase private checkout
+        if: always()
+        run: rm -rf -- "$GITHUB_WORKSPACE/source"
