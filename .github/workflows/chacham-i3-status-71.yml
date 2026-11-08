@@ -22,12 +22,24 @@ jobs:
         env:
           READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
         run: test -n "$READ_TOKEN"
+      - name: Check scoped private read access (status codes only, no credentials)
+        env:
+          T_READ: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          T_GH: ${{ secrets.GH_TOKEN }}
+        shell: bash
+        run: |
+          for entry in READ GH; do
+            if [ "$entry" = READ ]; then v="$T_READ"; else v="$T_GH"; fi
+            if [ -z "$v" ]; then echo "PRIVATE_ACCESS_${entry}=MISSING"; continue; fi
+            status=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $v" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/toyro396133/chacham-lev/commits/$ACCEPTED_SHA" || true)
+            echo "PRIVATE_ACCESS_${entry}=HTTP_${status}"
+          done
       - name: Checkout exact private I3 semantic candidate
         uses: actions/checkout@v4
         with:
           repository: toyro396133/chacham-lev
           ref: b6c8a8a21cf6c052d30bfc63ad9e0b41787293e1
-          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          token: ${{ secrets.GH_TOKEN || secrets.CHACHAM_LEV_READ_TOKEN }}
           persist-credentials: false
           fetch-depth: 1
           path: private-source
