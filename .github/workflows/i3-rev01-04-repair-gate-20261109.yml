@@ -1,0 +1,175 @@
+name: Chacham Lev I3 REV01-04 isolated repair gate
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/i3-rev01-04-repair-gate-20261109.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: i3-rev01-04-pinned-repair
+  cancel-in-progress: false
+
+jobs:
+  repair-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-synthetic-only
+          POSTGRES_DB: chacham_i3_repair
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chacham_i3_repair"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      TARGET_SHA: 95df4f3f4ff4eab492eebf440491c46571afe398
+      BASE_228: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+      DATABASE_URL: postgresql://postgres:isolated-synthetic-only@127.0.0.1:5432/chacham_i3_repair?schema=public
+      NEXTAUTH_SECRET: synthetic-i3-repair-local-only
+      AUTH_SECRET: synthetic-i3-repair-local-only
+      NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+      NEXT_TELEMETRY_DISABLED: '1'
+      CI: 'true'
+    steps:
+      - name: Require existing private read-only token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+
+      - name: Checkout exact private PR244 HEAD (not production)
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.TARGET_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+
+      - name: Checkout fixed PR228 source for disposable merge only
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.BASE_228 }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: importer
+
+      - name: Verify two exact private SHAs
+        shell: bash
+        run: |
+          test "$(git -C source rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git -C importer rev-parse HEAD)" = "$BASE_228"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Frozen install and Prisma schema/client (synthetic only)
+        working-directory: source
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec prisma validate
+          pnpm exec prisma generate
+
+      - name: Focused I3 source/permission/HMAC/DTO/UI and operational status tests
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec vitest run \
+            src/actions/importV2LegacyStatusReviewActions.test.ts \
+            src/actions/importV2SourceDualPath.i3.test.ts \
+            src/lib/import-v2-person-evidence.i3.test.ts \
+            src/actions/personInstitutionalFactsActions.test.ts \
+            src/components/import-v2-person-scoped.test.tsx \
+            src/actions/personActions.operationalStatus.i3.test.ts \
+            src/actions/importV2ComputedAffinitiesActions.r243-07.test.ts > "$RUNNER_TEMP/i3-focused.log" 2>&1 || {
+              echo "Focused tests failed (private log withheld from public runner)" >&2
+              exit 1
+            }
+          echo "Focused tests: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Actual PostgreSQL 16 operational action regression (mocked auth, real DB)
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec prisma db push --skip-generate > "$RUNNER_TEMP/i3-db-push.log" 2>&1 || {
+            echo "Synthetic PG schema failed" >&2; exit 1;
+          }
+          pnpm exec vitest run src/actions/personActions.operationalStatus.pg.i3.test.ts > "$RUNNER_TEMP/i3-real-pg.log" 2>&1 || {
+            echo "Native PostgreSQL operational status action test failed" >&2; exit 1;
+          }
+          echo "Native PG16 action test: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Full TypeScript and targeted ESLint
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec tsc --noEmit > "$RUNNER_TEMP/i3-tsc.log" 2>&1 || {
+            echo "TypeScript check failed" >&2; exit 1;
+          }
+          pnpm exec eslint \
+            src/actions/importV2LegacyStatusReviewActions.ts \
+            src/actions/personInstitutionalFactsActions.ts \
+            src/components/PersonInstitutionalFactsTab.tsx \
+            src/actions/personActions.ts > "$RUNNER_TEMP/i3-eslint.log" 2>&1 || {
+            echo "ESLint check failed" >&2; exit 1;
+          }
+          echo "TypeScript/ESLint: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rehearse non-production PR228+PR244 merge without losing documentation
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch "$GITHUB_WORKSPACE/importer" HEAD > /dev/null
+          git -c user.name="isolated-runner" -c user.email="runner@example.invalid" \
+            merge --no-commit --no-ff FETCH_HEAD > "$RUNNER_TEMP/i3-merge.log" 2>&1 || true
+          conflicts="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$conflicts" ]; then
+            while IFS= read -r path; do
+              case "$path" in
+                CHANGELOG.en.md|CHANGELOG.he.md|CONTEXT.md|docs/dev/routes.md) ;;
+                *) echo "Unexpected non-document conflict: $path" >&2; exit 1 ;;
+              esac
+            done <<< "$conflicts"
+            git checkout --ours -- CHANGELOG.en.md CHANGELOG.he.md CONTEXT.md docs/dev/routes.md
+            git add CHANGELOG.en.md CHANGELOG.he.md CONTEXT.md docs/dev/routes.md
+          fi
+          test -z "$(git diff --name-only --diff-filter=U)"
+          grep -q 'I3 Identity-First engineering' CHANGELOG.en.md
+          grep -q 'מימוש I3 Identity-First' CHANGELOG.he.md
+          grep -q 'PR228 identity-first history' CONTEXT.md
+          grep -q '/people/source-evidence' docs/dev/routes.md
+          grep -q 'Shared evidence read' docs/dev/routes.md
+          echo "Disposable merge and documentation preservation: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report verification boundary
+        if: always()
+        shell: bash
+        run: |
+          echo "## I3 REV01-04 isolated gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR244: $TARGET_SHA; PR228: $BASE_228" >> "$GITHUB_STEP_SUMMARY"
+          echo "Native PostgreSQL 16 and fixture identities only; no Neon or Production access." >> "$GITHUB_STEP_SUMMARY"
+          echo "NextAuth browser E2E is not proven by this workflow." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Erase private checkouts and private logs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/importer"
+          rm -f -- "$RUNNER_TEMP"/i3-*.log
