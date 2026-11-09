@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 054b2af974477fb04b6eb4a54f75914392773c34
+          ref: 06204bb93b6321800b31bf8a662f5c173012bf93
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "054b2af974477fb04b6eb4a54f75914392773c34"
+          test "$(git rev-parse HEAD)" = "06204bb93b6321800b31bf8a662f5c173012bf93"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
