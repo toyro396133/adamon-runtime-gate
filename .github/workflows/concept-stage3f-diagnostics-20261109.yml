@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "2791bb3a3ab597204cb3b978d2ee2c1fcab36085"
+          test "$(git rev-parse HEAD)" = "7850101348a81e7ecda351a600cc90cc3485abe5"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
