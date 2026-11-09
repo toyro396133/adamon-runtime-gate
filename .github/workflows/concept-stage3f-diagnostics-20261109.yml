@@ -1,0 +1,82 @@
+name: Stage3F read-only GRU and causal diagnostics
+on:
+  push:
+    branches: [ci/concept-stage3f-diagnostics-20261109]
+    paths: [.github/workflows/concept-stage3f-diagnostics-20261109.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Require research source access
+        env:
+          SOURCE_TOKEN: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+        run: test -n "$SOURCE_TOKEN" || { echo "::error::Missing read token"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: toyro396133/recursive-concepts-lab
+          ref: d5ab715b76d0403902c505465fa2b4c81cc34b88
+          token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
+          persist-credentials: false
+          path: source
+      - name: Restore protected Stage3D 40k checkpoints
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-7-step-40000
+          run-id: 42459515344
+          github-token: ${{ github.token }}
+          path: baseline
+      - name: Restore protected Stage3D 40k seed17 checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3d-seed-17-step-40000
+          run-id: 42459515344
+          github-token: ${{ github.token }}
+          path: baseline
+      - name: Restore Stage3E 60k seed7 checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3e-seed-7-step-60000
+          run-id: 42524851479
+          github-token: ${{ github.token }}
+          path: final
+      - name: Restore Stage3E 60k seed17 checkpoint
+        uses: actions/download-artifact@v4
+        with:
+          name: stage3e-seed-17-step-60000
+          run-id: 42524851479
+          github-token: ${{ github.token }}
+          path: final
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned CPU scientific runtime
+        run: |
+          python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'numpy==2.3.4'
+      - name: Verify source and compile diagnostics
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "d5ab715b76d0403902c505465fa2b4c81cc34b88"
+          python -m py_compile research/neural_units/stage3f_diagnostics.py
+          python -m unittest tests.test_stage3e_cumulative -v
+      - name: Run read-only Stage3F interventions for both seeds
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.stage3f_diagnostics \
+            --baseline-dir ../../baseline --final-dir ../../final \
+            --output results/stage3f/diagnostics.json
+      - name: Archive Stage3F diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage3f-read-only-diagnostics
+          path: source/concept-discovery-v2/results/stage3f/
+          if-no-files-found: warn
+          retention-days: 90
