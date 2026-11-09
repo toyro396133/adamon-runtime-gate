@@ -1,0 +1,283 @@
+name: Chacham Lev I3 REV01-04 real NextAuth action E2E
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/i3-rev01-04-nextauth-e2e-20261109.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: i3-rev01-04-nextauth-e2e
+  cancel-in-progress: false
+
+jobs:
+  authenticated-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-browser-only
+          POSTGRES_DB: i3_browser_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d i3_browser_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      TARGET_SHA: 95df4f3f4ff4eab492eebf440491c46571afe398
+      BASE_228: 2a329cc347729d5bf519ac6091eb5b3bf4b59019
+      DATABASE_URL: postgresql://postgres:synthetic-browser-only@127.0.0.1:5432/i3_browser_test?schema=public
+      E2E_BASE_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_DEV_BYPASS_AUTH: 'false'
+      NEXT_TELEMETRY_DISABLED: '1'
+      CI: 'true'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Require pre-existing private source read token
+        env:
+          READ_TOKEN: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+        run: test -n "$READ_TOKEN"
+
+      - name: Checkout pinned private PR244 source
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.TARGET_SHA }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+
+      - name: Checkout unchanged PR228 for temporary application integration
+        uses: actions/checkout@v4
+        with:
+          repository: toyro396133/chacham-lev
+          ref: ${{ env.BASE_228 }}
+          token: ${{ secrets.CHACHAM_LEV_READ_TOKEN }}
+          persist-credentials: false
+          fetch-depth: 1
+          path: importer
+
+      - name: Reconstruct disposable integrated workspace (no branch writes)
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$TARGET_SHA"
+          test "$(git -C ../importer rev-parse HEAD)" = "$BASE_228"
+          git fetch "$GITHUB_WORKSPACE/importer" HEAD > /dev/null
+          git -c user.name="I3 CI" -c user.email="runner@example.invalid" \
+            merge --no-commit --no-ff FETCH_HEAD > "$RUNNER_TEMP/i3-merge.log" 2>&1 || true
+          conflicts="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$conflicts" ]; then
+            while IFS= read -r path; do
+              case "$path" in
+                CHANGELOG.en.md|CHANGELOG.he.md|CONTEXT.md|docs/dev/routes.md) ;;
+                *) echo "Unexpected non-document conflict: $path" >&2; exit 1 ;;
+              esac
+            done <<< "$conflicts"
+            git checkout --ours -- CHANGELOG.en.md CHANGELOG.he.md CONTEXT.md docs/dev/routes.md
+            git add CHANGELOG.en.md CHANGELOG.he.md CONTEXT.md docs/dev/routes.md
+          fi
+          test -z "$(git diff --name-only --diff-filter=U)"
+          test -f src/app/people/source-evidence/page.tsx || { echo "Evidence route not in merged candidate"; exit 1; }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Generate unique temporary session, MAC and login secrets
+        shell: bash
+        run: |
+          session="$(openssl rand -hex 32)"
+          echo "NEXTAUTH_SECRET=$session" >> "$GITHUB_ENV"
+          echo "AUTH_SECRET=$session" >> "$GITHUB_ENV"
+          echo "I3_SOURCE_EVIDENCE_MAC_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "E2E_TEST_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+
+      - name: Install frozen dependencies and create synthetic PostgreSQL schema
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm install --frozen-lockfile > "$RUNNER_TEMP/i3-install.log" 2>&1
+          pnpm exec prisma generate > "$RUNNER_TEMP/i3-prisma.log" 2>&1
+          pnpm exec prisma db push --skip-generate > "$RUNNER_TEMP/i3-schema.log" 2>&1
+
+      - name: Seed synthetic NextAuth users and signed I3 evidence, never live data
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec tsx scripts/e2e/seed-mobile-system.ts > "$RUNNER_TEMP/i3-seed.log" 2>&1
+          node tests/import-v2/i3_browser_seed.mjs >> "$RUNNER_TEMP/i3-seed.log" 2>&1
+          node --input-type=module <<'SEED'
+          import pg from 'pg';
+          import bcrypt from 'bcryptjs';
+          const c=new pg.Client({connectionString:process.env.DATABASE_URL});await c.connect();
+          try {
+            const hash=await bcrypt.hash(process.env.E2E_TEST_PASSWORD,10);
+            await c.query('INSERT INTO public."User"(id,email,phone,password,name,role,"tenantId","updatedAt") VALUES($1,$2,$3,$4,$5,$6,$7,now())',
+              ['i3-rev-staff','i3-rev-staff@example.invalid','052-1234521',hash,'Synthetic STAFF','STAFF','e2e-mobile-tenant']);
+            await c.query('INSERT INTO public."PersonInstitutionalAffiliation" (id,"tenantId","personId",kind,role,source,rationale,"decidedById","updatedAt") VALUES($1,$2,$3,$4,$5,$6,$7,$8,now())',
+              ['i3-rev-fact','e2e-mobile-tenant','e2e-mobile-person','AVRECH','GENERAL','synthetic-verification','synthetic-authorized-decision','e2e-mobile-admin']);
+          } finally {await c.end();}
+          SEED
+
+      - name: Create ephemeral browser probe for genuine Next.js Server Action POST
+        working-directory: source
+        shell: bash
+        run: |
+          mkdir -p src/app/i3-rev-security-probe
+          cat > src/app/i3-rev-security-probe/page.tsx <<'PROBE'
+          'use client';
+          import {useState} from 'react';
+          import {getPersonLegacyStatusReviewAction} from '@/actions/importV2LegacyStatusReviewActions';
+          import {getPersonInstitutionalFactsAction} from '@/actions/personInstitutionalFactsActions';
+          export default function I3RevSecurityProbe(){
+            const [source,setSource]=useState('NOT_RUN');
+            const [facts,setFacts]=useState('NOT_RUN');
+            async function sourceRead(){
+              try{
+                const r=await getPersonLegacyStatusReviewAction('e2e-mobile-person');
+                setSource(r?.sourceRow===1?'AUTHORIZED_SOURCE_ROW_1':'NO_RECORD');
+              }catch{setSource('DENIED');}
+            }
+            async function factsRead(){
+              try{
+                const r=await getPersonInstitutionalFactsAction('e2e-mobile-person');
+                setFacts(JSON.stringify(r.facts));
+              }catch{setFacts('DENIED');}
+            }
+            return <main>
+              <button type="button" onClick={()=>void sourceRead()}>I3 verify source action</button>
+              <output data-testid="source-result">{source}</output>
+              <button type="button" onClick={()=>void factsRead()}>I3 verify facts action</button>
+              <output data-testid="facts-result">{facts}</output>
+            </main>;
+          }
+          PROBE
+
+          cat > e2e/i3-rev-security-probe.spec.ts <<'SPEC'
+          import {test,expect,type Page} from '@playwright/test';
+          import pg from 'pg';
+          const pass=process.env.E2E_TEST_PASSWORD||'';
+          async function login(page:Page,phone:string){
+            await page.goto('/login');
+            await page.getByLabel('מספר טלפון').fill(phone);
+            await page.getByLabel('סיסמה').fill(pass);
+            await page.getByRole('button',{name:'התחבר',exact:true}).click();
+            await page.waitForURL('**/dashboard',{timeout:20000});
+            await page.goto('/i3-rev-security-probe');
+          }
+          async function source(page:Page){
+            await page.getByRole('button',{name:'I3 verify source action'}).click();
+            return page.getByTestId('source-result');
+          }
+          async function facts(page:Page){
+            await page.getByRole('button',{name:'I3 verify facts action'}).click();
+            return page.getByTestId('facts-result');
+          }
+          test('real NextAuth ADMIN and MASTER allow attested source and audit actor',async({page})=>{
+            await login(page,'052-1234507');
+            await expect(await source(page)).toHaveText('AUTHORIZED_SOURCE_ROW_1');
+            await expect(await facts(page)).toContainText('decidedById');
+          });
+          test('real NextAuth MASTER can read source across the scoped tenant',async({page})=>{
+            await login(page,'052-1234509');
+            await expect(await source(page)).toHaveText('AUTHORIZED_SOURCE_ROW_1');
+          });
+          for(const [label,phone] of [
+            ['MANAGER','052-1234502'],['STAFF','052-1234521'],
+          ] as const){
+            test(label+' cannot read source but may read redacted institutional fact',async({page})=>{
+              await login(page,phone);
+              await expect(await source(page)).toHaveText('DENIED');
+              const result=await facts(page);
+              await expect(result).toContainText('synthetic-verification');
+              await expect(result).not.toContainText('decidedById');
+              await expect(result).not.toContainText('e2e-mobile-admin');
+            });
+          }
+          test('revoking an existing ADMIN session denies the next source action',async({page})=>{
+            await login(page,'052-1234507');
+            await expect(await source(page)).toHaveText('AUTHORIZED_SOURCE_ROW_1');
+            const c=new pg.Client({connectionString:process.env.DATABASE_URL});await c.connect();
+            try{
+              await c.query('UPDATE public."User" SET "isActive"=false WHERE id=$1',['e2e-mobile-admin']);
+              await expect(await source(page)).toHaveText('DENIED');
+            } finally {
+              await c.query('UPDATE public."User" SET "isActive"=true WHERE id=$1',['e2e-mobile-admin']);
+              await c.end();
+            }
+          });
+          test('obsolete DB role denies source even when session still says ADMIN',async({page})=>{
+            await login(page,'052-1234507');
+            const c=new pg.Client({connectionString:process.env.DATABASE_URL});await c.connect();
+            try{
+              await c.query('UPDATE public."User" SET role=$1 WHERE id=$2',['OLD_ROLE','e2e-mobile-admin']);
+              await expect(await source(page)).toHaveText('DENIED');
+            } finally {
+              await c.query('UPDATE public."User" SET role=$1 WHERE id=$2',['ADMIN','e2e-mobile-admin']);
+              await c.end();
+            }
+          });
+          SPEC
+
+      - name: Build actual production-mode Next.js app
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm run build > "$RUNNER_TEMP/i3-next-build.log" 2>&1 || {
+            echo "Integrated Next.js build failed; private log withheld" >&2;exit 1;
+          }
+
+      - name: Install browser toolchain
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm add --save-dev --lockfile=false @playwright/test@1.55.0 > "$RUNNER_TEMP/i3-playwright-install.log" 2>&1
+          pnpm exec playwright install --with-deps chromium > "$RUNNER_TEMP/i3-chromium.log" 2>&1
+
+      - name: Start localhost production server with real NextAuth
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec next start -H 127.0.0.1 -p 3000 > "$RUNNER_TEMP/i3-server.log" 2>&1 &
+          for i in {1..90}; do
+            if curl --fail --silent http://127.0.0.1:3000/login > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Synthetic localhost Next.js server failed to start";exit 1
+
+      - name: Run targeted browser source page and actual Server Action auth regressions
+        working-directory: source
+        shell: bash
+        run: |
+          pnpm exec playwright test e2e/import-v2-i3.spec.ts e2e/i3-rev-security-probe.spec.ts --reporter=line > "$RUNNER_TEMP/i3-browser.log" 2>&1 || {
+            echo "NextAuth/ServerAction E2E failed; private log withheld" >&2;exit 1;
+          }
+          echo "Real NextAuth/browser/ServerAction POST and source page: PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Explicit acceptance boundary
+        if: always()
+        run: |
+          echo "## I3 REV01–04 real NextAuth boundary" >> "$GITHUB_STEP_SUMMARY"
+          echo "PR244: $TARGET_SHA; PR228: $BASE_228" >> "$GITHUB_STEP_SUMMARY"
+          echo "Temporary integrated checkout only; synthetic PG16 and generated accounts." >> "$GITHUB_STEP_SUMMARY"
+          echo "No production, real I3 row mutation, semantic APPLY, main merge, or deployment." >> "$GITHUB_STEP_SUMMARY"
+          echo "Ephemeral security-probe page never committed to private product source." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove all private files and temporary logs
+        if: always()
+        run: |
+          rm -rf -- "$GITHUB_WORKSPACE/source" "$GITHUB_WORKSPACE/importer"
+          rm -f -- "$RUNNER_TEMP"/i3-*.log
