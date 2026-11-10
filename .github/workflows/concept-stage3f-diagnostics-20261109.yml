@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: c2590a2b19be5def203a0d72295928464731cc8c
+          ref: 5f4df4667744e059e03f347b04b4893fda2b4c3d
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -58,16 +58,17 @@ jobs:
         run: |
           python -m pip install 'torch==2.10.0' --index-url https://download.pytorch.org/whl/cpu
           python -m pip install 'numpy==2.3.4'
-      - name: Verify source and compile diagnostics
+      - name: Verify source, compile diagnostics and regression tests
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "c2590a2b19be5def203a0d72295928464731cc8c"
+          test "$(git rev-parse HEAD)" = "5f4df4667744e059e03f347b04b4893fda2b4c3d"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
+          python -m py_compile research/neural_units/stage3f_results_audit.py
           python -m research.neural_units.stage3f_independent_hebrew
-          python -m unittest tests.test_stage3e_cumulative tests.test_stage3f_read_only -v
+          python -m unittest tests.test_stage3e_cumulative tests.test_stage3f_read_only tests.test_stage3f_results_audit -v
       - name: Run read-only Stage3F interventions for both seeds
         working-directory: source/concept-discovery-v2
         run: |
@@ -75,7 +76,12 @@ jobs:
           python -u -m research.neural_units.stage3f_full_diagnostics \
             --baseline-dir ../../baseline --final-dir ../../final \
             --output results/stage3f
-      - name: Archive Stage3F diagnostics
+      - name: Audit pair labels and paired correctness without model access
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python -u -m research.neural_units.stage3f_results_audit --input results/stage3f
+      - name: Archive Stage3F diagnostics and metric audit
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -84,20 +90,4 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-# Re-trigger expanded Stage 3F read-only diagnostics after source and runner review (2026-11-10).
-
-# Re-run after correcting the backend identity observation import (2026-11-10).
-
-# Verify checkout pin and test pin stay synchronized for the next run.
-
-# Re-run after single-forward integration verification fix (2026-11-10).
-
-# Re-run with explicit two-layer GRU gate and discriminative-margin probes (2026-11-10).
-
-# Re-run with paired representation probes and GRU reconstruction regression tests (2026-11-10).
-
-# Re-run after Hebrew agreement cleanup and paired-sample test correction (2026-11-10).
-
-# Re-run after completing gender-agreement corrections and corpus regression checks (2026-11-10).
-
-# Re-run after correcting paired option-vector cache keys (2026-11-10).
+# Re-run after adding the read-only paired-label audit and independent regression tests (2026-11-10).
