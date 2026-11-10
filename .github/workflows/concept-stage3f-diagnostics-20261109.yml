@@ -83,3 +83,5 @@ jobs:
           path: source/concept-discovery-v2/results/stage3f/
           if-no-files-found: warn
           retention-days: 90
+
+# Re-trigger expanded Stage 3F read-only diagnostics after source and runner review (2026-11-10).
