@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 111d5520f22e501cedf38a500b3aca1f462b0742
+          ref: a5f30aa7cdea00d8295c86afae853c374107e427
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
