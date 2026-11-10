@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 159b63582876683a96aa03a6c6c0846bc0078348
+          ref: 7a5b412503f9314ef504ef59243a8a77fc5cd579
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "159b63582876683a96aa03a6c6c0846bc0078348"
+          test "$(git rev-parse HEAD)" = "7a5b412503f9314ef504ef59243a8a77fc5cd579"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
@@ -89,3 +89,5 @@ jobs:
 # Re-run after correcting the backend identity observation import (2026-11-10).
 
 # Verify checkout pin and test pin stay synchronized for the next run.
+
+# Re-run after single-forward integration verification fix (2026-11-10).
