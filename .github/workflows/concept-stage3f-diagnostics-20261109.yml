@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "73edfc8d391dc7dcfbc3f810d9b853bd9cf3c446"
+          test "$(git rev-parse HEAD)" = "159b63582876683a96aa03a6c6c0846bc0078348"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
@@ -87,3 +87,5 @@ jobs:
 # Re-trigger expanded Stage 3F read-only diagnostics after source and runner review (2026-11-10).
 
 # Re-run after correcting the backend identity observation import (2026-11-10).
+
+# Verify checkout pin and test pin stay synchronized for the next run.
