@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 8c5f2d67840aeae299d1bd73bef03a8f8d223e7d
+          ref: c2590a2b19be5def203a0d72295928464731cc8c
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "8c5f2d67840aeae299d1bd73bef03a8f8d223e7d"
+          test "$(git rev-parse HEAD)" = "c2590a2b19be5def203a0d72295928464731cc8c"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
@@ -99,3 +99,5 @@ jobs:
 # Re-run after Hebrew agreement cleanup and paired-sample test correction (2026-11-10).
 
 # Re-run after completing gender-agreement corrections and corpus regression checks (2026-11-10).
+
+# Re-run after correcting paired option-vector cache keys (2026-11-10).
