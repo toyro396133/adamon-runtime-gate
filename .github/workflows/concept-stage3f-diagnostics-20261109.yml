@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: a90480024bf526226bbedad8523513ecf0b5c806
+          ref: 7a7f3f4da5a1751635d0af3761c4f15646c3f1dc
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "a90480024bf526226bbedad8523513ecf0b5c806"
+          test "$(git rev-parse HEAD)" = "7a7f3f4da5a1751635d0af3761c4f15646c3f1dc"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
@@ -93,10 +93,12 @@ jobs:
 
 # Final exact-head verification after report, flow-map and data artifacts were committed (2026-11-10).
 
-# Stage 3F exact-head rerun trigger; source remains pinned to PR #34 head a90480024bf526226bbedad8523513ecf0b5c806.
+# Stage 3F exact-head rerun trigger; source remains pinned to PR #34 head 7a7f3f4da5a1751635d0af3761c4f15646c3f1dc.
 
 # Stage 3F fix: derive flip/stable novel-item metrics from the explicit prediction ledger.
 
 # Stage 3F novelty audit: verify 32 unique target items disjoint from all demonstration items.
 
 # Stage 3F regression fixture updated for the 32-unique-novel-item contract.
+
+# Stage 3F audit JSON writer regression: strict JSON must end with a real newline.
