@@ -92,3 +92,5 @@ jobs:
           retention-days: 90
 
 # Final exact-head verification after report, flow-map and data artifacts were committed (2026-11-10).
+
+# Stage 3F exact-head rerun trigger; source remains pinned to PR #34 head 34212b08d9cf872ff93dd5f775c619b3aca21385.
