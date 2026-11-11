@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 34212b08d9cf872ff93dd5f775c619b3aca21385
+          ref: 6eb75a85d0f57dc377a3b6d39935887b61e60312
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "34212b08d9cf872ff93dd5f775c619b3aca21385"
+          test "$(git rev-parse HEAD)" = "6eb75a85d0f57dc377a3b6d39935887b61e60312"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
@@ -93,4 +93,6 @@ jobs:
 
 # Final exact-head verification after report, flow-map and data artifacts were committed (2026-11-10).
 
-# Stage 3F exact-head rerun trigger; source remains pinned to PR #34 head 34212b08d9cf872ff93dd5f775c619b3aca21385.
+# Stage 3F exact-head rerun trigger; source remains pinned to PR #34 head 6eb75a85d0f57dc377a3b6d39935887b61e60312.
+
+# Stage 3F fix: derive flip/stable novel-item metrics from the explicit prediction ledger.
