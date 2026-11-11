@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: toyro396133/recursive-concepts-lab
-          ref: 7a7f3f4da5a1751635d0af3761c4f15646c3f1dc
+          ref: 1725100488c8b3e5dc77acbcf4ef0300e7b2e23c
           token: ${{ secrets.RECURSIVE_CONCEPTS_READ_TOKEN }}
           persist-credentials: false
           path: source
@@ -62,7 +62,7 @@ jobs:
         working-directory: source/concept-discovery-v2
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "7a7f3f4da5a1751635d0af3761c4f15646c3f1dc"
+          test "$(git rev-parse HEAD)" = "1725100488c8b3e5dc77acbcf4ef0300e7b2e23c"
           python -m py_compile research/neural_units/stage3f_diagnostics.py
           python -m py_compile research/neural_units/stage3f_independent_hebrew.py
           python -m py_compile research/neural_units/stage3f_full_diagnostics.py
@@ -82,6 +82,29 @@ jobs:
         run: |
           set -euo pipefail
           python -u -m research.neural_units.stage3f_results_audit --input results/stage3f
+      - name: Verify all Stage3F JSON outputs are strict JSON
+        working-directory: source/concept-discovery-v2
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          output = Path("results/stage3f")
+          required = (
+              "stage3f_full_diagnostics.json",
+              "stage3f_independent_hebrew_corpus.json",
+              "stage3f_generalization_supplement.json",
+              "stage3f_pair_label_audit.json",
+              "stage3f_generalization_audit.json",
+          )
+          for name in required:
+              path = output / name
+              raw = path.read_bytes()
+              assert raw.endswith(b"\\n"), f"{name}: missing real trailing newline"
+              assert not raw.endswith(b"\\\\n"), f"{name}: literal backslash-n suffix"
+              json.loads(raw.decode("utf-8"))
+              print(f"STRICT_JSON_OK {name} bytes={len(raw)}")
+          PY
       - name: Archive Stage3F diagnostics and metric audit
         if: always()
         uses: actions/upload-artifact@v4
@@ -93,7 +116,7 @@ jobs:
 
 # Final exact-head verification after report, flow-map and data artifacts were committed (2026-11-10).
 
-# Stage 3F exact-head rerun trigger; source remains pinned to PR #34 head 7a7f3f4da5a1751635d0af3761c4f15646c3f1dc.
+# Stage 3F exact-head rerun trigger; source remains pinned to PR #34 head 1725100488c8b3e5dc77acbcf4ef0300e7b2e23c.
 
 # Stage 3F fix: derive flip/stable novel-item metrics from the explicit prediction ledger.
 
