@@ -100,8 +100,8 @@ jobs:
           for name in required:
               path = output / name
               raw = path.read_bytes()
-              assert raw.endswith(b"\\n"), f"{name}: missing real trailing newline"
-              assert not raw.endswith(b"\\\\n"), f"{name}: literal backslash-n suffix"
+              assert raw.endswith(b"\n"), f"{name}: missing real trailing newline"
+              assert not raw.endswith(b"\\n"), f"{name}: literal backslash-n suffix"
               json.loads(raw.decode("utf-8"))
               print(f"STRICT_JSON_OK {name} bytes={len(raw)}")
           PY
